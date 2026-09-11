@@ -6,6 +6,8 @@ LLM_Ownership_Identification_Latex/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+*.bbl
+*.blg
 
 # Local/editor/cache artifacts
 scratch_notes.md
@@ -13,3 +15,6 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .vscode/
+
+# Superseded paper retained locally for archival reference
+(OUTDATED)_first_paper_draft.pdf

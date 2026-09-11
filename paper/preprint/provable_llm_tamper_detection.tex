@@ -1,0 +1,1050 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+\usepackage{natbib}
+\usepackage{microtype}
+
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage{amsthm}
+\hypersetup{hidelinks}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}
+  {-2.2ex plus -0.5ex minus -0.2ex}
+  {1.2ex plus 0.2ex}
+  {\normalfont\large\scshape\raggedright}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}
+  {-1.8ex plus -0.4ex minus -0.2ex}
+  {0.8ex plus 0.2ex}
+  {\normalfont\normalsize\scshape\raggedright}}
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}
+  {-1.5ex plus -0.3ex minus -0.2ex}
+  {0.6ex plus 0.2ex}
+  {\normalfont\normalsize\scshape\raggedright}}
+\makeatother
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5pc}
+
+\title{Provable LLM Tamper Detection: Catching Model Provider Tampering of
+Open-Weights LLMs}
+
+\author{Jerry Bao\\University of Waterloo\\\texttt{jerry.bao@uwaterloo.ca}}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+% Write after the technical content has stabilized.
+\end{abstract}
+
+\section{Introduction}
+
+\section{Related Work}
+
+\section{Problem Setting}
+\subsection{Threat Model}
+
+Throughout this paper, we consider the scenario of a user who accesses a given open-weights LLM
+through a provider's black-box inference API. Examples of this service model
+include NVIDIA-hosted NIM endpoints, Fireworks AI Serverless, and Together AI
+Serverless Endpoints
+\citep{nvidia_nim_quickstart,fireworks_serverless,together_serverless}. The user's objective is to determine whether the model configuration they are being served has been tampered with. Examples of tampering include serving a different model than the one advertised, injecting an undisclosed prompt, serving an undeclared fine-tune, or using an undeclared quantization scheme.
+
+In this threat model, we define an \emph{untampered} model configuration as one that satisfies the following desirable properties:
+\begin{enumerate}
+    \item Generation uses a standard randomized sampling decoder: generation is
+    nondeterministic, and repeated identical requests are independent samples
+    from a fixed conditional output distribution.
+    \item The user can reconstruct the full token sequence of the LLM's context window
+    immediately before the first token is generated.
+    \item The user can reconstruct the full sequence of the LLM's generated tokens.
+    \item The served architecture, weights, and tokenizer are identical to those of the
+    specified public model checkpoint, except for weight quantization permitted by property 5.
+    \item The weight quantization method satisfies an expected standard (e.g. unquantized, or a quantization scheme reported by the provider).
+    \item The provider only uses standard inference-time decoding parameters, which are defined in Section~\ref{sec:standard-decoding-parameters}.
+    \item The underlying model configuration being served, as well as the
+    decoding parameter values, remain fixed across all queries.
+\end{enumerate}
+
+A model configuration that does not satisfy the definition of \emph{untampered} is considered \emph{tampered}.
+
+We furthermore make the following assumptions:
+\begin{enumerate}
+    \item The user has full access to the provider model's advertised open weights checkpoint.
+    \item The user can submit arbitrarily many queries to the black-box provider's service.
+    \item The user can observe the string representation of any returned response from the provider, though not necessarily the individual token boundaries or IDs.
+    \item The user can restrict each returned response from the provider to a chosen maximum number of output tokens.
+\end{enumerate}
+
+
+\subsection{Threat Model Discussion}
+\subsubsection{Rationale}
+In the definition of \emph{untampered}, properties 1--5 and 7 define the baseline for everyday faithful LLM serving: ordinary stochastic inference, input/output visibility, fidelity to the advertised model, acceptable quantization, and consistency across queries. Furthermore, because the full universe of possible decoding parameters is unstandardized and potentially infinite, property 6 requires that the provider's decoding parameters be drawn from a canonical set of recognized, widely-used decoding parameters. This prevents an adversarial provider who uses obscure or proprietary decoding parameters to maliciously manipulate the model's outputs from satisfying the definition of \emph{untampered} by technicality. To restrict the scope of tampering to more invasive forms of model configuration manipulation (e.g. fine-tuning, stealthy quantization), the specific choices of values among the standard decoding parameters will not be considered tampering.
+
+\subsubsection{Implications For Malicious Providers}
+
+In this setting, a malicious provider's primary option for plausibly denying tampering is to explain away unexpected measured model behavior as being caused by benign hidden values of standard decoding parameters. In 2026, the growing prevalence
+of model APIs with unexposed decoding parameters in releases from
+major LLM vendors makes this defense increasingly credible.
+For example,
+OpenAI does not expose temperature or top-$p$ for GPT-5.2 in thinking mode;
+Anthropic does not expose temperature, top-$p$, or top-$k$ to the user on Claude
+4.7 and later; Google does not expose temperature, top-$p$, or top-$k$ for
+Gemini 3 models; and DeepSeek does not expose
+temperature, top-$p$, presence penalty, or frequency penalty in thinking mode
+\citep{openai_gpt52_parameters,anthropic_messages_api,
+google_gemini_inference,deepseek_thinking_mode}. The central question of this paper is whether a user can demonstrate a model configuration to be tampered despite the obfuscation and plausible deniability afforded by hidden standard decoding parameter values.
+
+
+\subsection{Standard Decoding Parameters}
+\label{sec:standard-decoding-parameters}
+
+Here, we compile a list of standard decoding parameters found in widely-used LLM
+APIs and inference stacks, including OpenAI's API, Hugging Face Transformers,
+llama.cpp, and KoboldCpp
+\citep{openai_chat_sampling,huggingface_generation,llamacpp_server,
+koboldcpp_samplers}. We refer to the parameters on this list as the
+\emph{standard decoding parameters} throughout the paper.
+
+Let $z_t$ be the model's raw logit for token $t$ at the first output position,
+and let $p_t=\exp(z_t)/\sum_s\exp(z_s)$ be its probability. The parameters below
+transform these logits or probabilities before the first output token is
+sampled. Excluding token $t$ means setting $z_t=-\infty$ and renormalizing the
+remaining probabilities.
+
+\begin{itemize}
+    \item \textbf{Temperature.} For $T>0$, replace $z_t$ by $z_t/T$.
+
+    \item \textbf{Logit bias or token bias.} For a fixed per-token bias $b_t$,
+    replace $z_t$ by $z_t+b_t$ \citep{openai_chat_sampling}.
+
+    \item \textbf{Top-$p$ (nucleus sampling).} Sort tokens by decreasing
+    probability and retain the shortest prefix whose cumulative mass is at
+    least $p$ \citep{holtzman2020nucleus}.
+
+    \item \textbf{Top-$k$.} Retain the $k$ tokens with greatest probability
+    \citep{huggingface_generation}.
+
+    \item \textbf{Frequency penalty.} If $c_t$ is the number of occurrences of
+    $t$ in the history consulted by the decoder, replace $z_t$ by
+    $z_t-\lambda_f c_t$.
+
+    \item \textbf{Presence penalty.} Replace $z_t$ by
+    $z_t-\lambda_p\mathbf{1}\{c_t>0\}$.
+
+    \item \textbf{Repetition penalty.} For a penalty $r>0$, rescale logits of
+    tokens found in the consulted history using the implementation's fixed
+    sign-aware rule; the standard Transformers rule divides a positive logit by
+    $r$ and multiplies a negative logit by $r$
+    \citep{huggingface_repetition_penalty}.
+
+    \item \textbf{Structured-output enforcement.} Given a grammar or schema,
+    retain exactly the tokens that can validly extend it from the current
+    prefix \citep{llamacpp_grammar_filter,llamacpp_server}.
+
+    \item \textbf{No-repeat-$n$-gram.} Exclude every token that would complete
+    an $n$-gram already present in the generated history
+    \citep{huggingface_generation}.
+
+    \item \textbf{Min-$p$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
+    $p_t\geq \alpha p_{\max}$ \citep{nguyen2025minp}.
+
+    \item \textbf{Typical-$p$.} Sort tokens by increasing
+    $|{-\log p_t}-H(p)|$ and retain the shortest prefix whose cumulative
+    probability is at least the typical-$p$ threshold
+    \citep{meister2023typical}.
+
+    \item \textbf{Mirostat.} Maintain a feedback state targeting a specified
+    mean surprise and use it to adapt the top-$k$ cutoff
+    \citep{basu2021mirostat}.
+
+    \item \textbf{Mirostat 2.} Maintain an adaptive threshold $\mu$ targeting
+    mean surprise $\tau$. Exclude tokens with $-\log p_t>\mu$, sample from the
+    remaining tokens, and update $\mu$ using the difference between the sampled
+    token's surprise and $\tau$ \citep{basu2021mirostat}.
+
+    \item \textbf{$\eta$-sampling.} For hyperparameter $\epsilon$, let
+    $\eta=\min\{\epsilon,\sqrt{\epsilon}\exp(-H(p))\}$ and retain tokens with
+    $p_t>\eta$ \citep{hewitt2022eta}.
+
+    \item \textbf{Tail-free sampling.} Sort tokens by decreasing probability
+    and compute the normalized magnitudes of the second finite differences of
+    those probabilities. Retain tokens until their cumulative value reaches the
+    threshold $z$, and exclude all remaining tokens
+    \citep{bricken_tailfree,koboldcpp_samplers}.
+
+    \item \textbf{Top-$a$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
+    $p_t\geq a p_{\max}^2$ \citep{koboldcpp_samplers}.
+\end{itemize}
+
+\section{Conventions}
+
+\paragraph{Nondegeneracy.}
+Throughout this paper, our results tacitly assume natural nondegeneracy and regularity
+conditions when appropriate. We state these conditions explicitly whenever they are nontrivial.
+
+\paragraph{Token identification.}
+To account for tokenizer differences across model configurations, we identify
+tokens by their string representations rather than by their underlying token
+IDs, unless stated otherwise.
+
+\section{Definitions}
+
+\paragraph{Expected and served models.}
+Let $M$ denote the \emph{expected model}: the open-weights architecture,
+checkpoint weights at their published precision, and tokenizer that the user
+believes the provider is serving. Let $\widetilde{M}$ denote the \emph{served
+model}: the architecture, weights, and tokenizer actually used by the provider.
+
+\paragraph{Decoding parameters.}
+For any token $t$, let $b(t)$ denote the token-specific logit bias used by the
+provider's API, and let $T>0$ denote the temperature used by the provider's API.
+
+\paragraph{Multinomial experiments.}
+A \emph{multinomial experiment} (or simply an \emph{experiment} when the
+meaning is clear) consists of repeatedly submitting the same request to the
+provider's LLM API and recording the string representation of the first
+generated token returned from each query. The user can observe this token without
+knowing its underlying token ID by limiting each response to one generated
+token.
+
+Each multinomial experiment $E_j$ has the following associated quantities:
+\begin{itemize}
+    \item An expected context $C_j$, chosen by the experimenter,
+    representing the context that the user \emph{believes} the served LLM $\widetilde{M}$ receives
+    immediately before the first token is generated.
+    \item Given any token $t$, $z_j(t)$, the raw logit assigned to $t$
+    by the expected model $M$ on context $C_j$, and $\widetilde{z}_j(t)$, the corresponding raw logit assigned by the served model
+    $\widetilde{M}$ on the context actually used by the provider. The
+    quantity $z_j(t)$ is computable by the user, whereas $\widetilde{z}_j(t)$
+    is unobserved.
+    \item A number of queries $N_j$, chosen by the experimenter.
+    \item Two token lists
+    $A_j=(a_{1,j},\ldots,a_{k_j,j})$ and
+    $B_j=(b_{1,j},\ldots,b_{k_j,j})$, where both $k_j$ and the tokens in
+    each list are chosen by the experimenter.
+    \item For each $i=1,\ldots,k_j$, the observed counts
+    $n_j(a_{i,j})$ and $n_j(b_{i,j})$, giving the number of queries whose first
+    generated token returned was $a_{i,j}$ or $b_{i,j}$, respectively.
+    \item For each $i=1,\ldots,k_j$, the unobserved theoretical quantities
+    $p_j(a_{i,j})$ and $p_j(b_{i,j})$, giving the true probabilities that the first
+    generated token returned by a query is $a_{i,j}$ or $b_{i,j}$,
+    respectively. ($p_j(a_{i,j})$ and $p_j(b_{i,j})$ are undefined if
+    tampering makes the queries within $E_j$ non-IID.)
+\end{itemize}
+\emph{Remark.} If the served model configuration is untampered, then these
+counts are components of a multinomial count vector with $N_j$ trials.
+
+\emph{Example.} Consider a hypothetical model that uses the ChatML template
+\citep{huggingface_chatml}. With an empty system message and the assistant
+generation prompt included, let $C_j$ be the following string:
+\begin{quote}\small
+\verb+<|im_start|>system+\\
+\verb+<|im_end|>+\\
+\verb+<|im_start|>user+\\
+\texttt{Generate a random number from the set \{zero, one\}. Output a digit and nothing else.}\verb+<|im_end|>+\\
+\verb+<|im_start|>assistant+
+\end{quote}
+Take $N_j=4$, $k_j=1$, $A_j=(a_{1,j})=(\texttt{"0"})$, and
+$B_j=(b_{1,j})=(\texttt{"1"})$. If the first tokens of the four same-query results are
+$\texttt{"0"},\texttt{"1"},\texttt{"1"},\texttt{"one"}$, then
+$n_j(a_{1,j})=1$ and $n_j(b_{1,j})=2$; the final string belongs to neither list.
+
+\paragraph{Derived quantities.}
+For each multinomial experiment $E_j$, define the logit aggregates
+$z_{a,j}=\sum_{i=1}^{k_j}z_j(a_{i,j})$, $z_{b,j}=\sum_{i=1}^{k_j}z_j(b_{i,j})$,
+and $\Delta z_j=z_{a,j}-z_{b,j}$; the bias aggregates
+    $b_{a,j}=\sum_{i=1}^{k_j}b(a_{i,j})$, $b_{b,j}=\sum_{i=1}^{k_j}b(b_{i,j})$,
+    and $\Delta b_j=b_{a,j}-b_{b,j}$; and the log-ratios
+    $\gamma_j=\ln\!\left(\prod_{i=1}^{k_j}\frac{n_j(a_{i,j})}{n_j(b_{i,j})}\right)$
+    and $\Gamma_j=\ln\!\left(\prod_{i=1}^{k_j}\frac{p_j(a_{i,j})}{p_j(b_{i,j})}\right)$
+    ($\Gamma_j$ is undefined if tampering makes the queries within $E_j$
+    non-IID).
+
+\paragraph{$\rho$-regularity.}
+An experiment $E_j$ is \emph{$\rho$-regular} if the tokens in $A_j$ and $B_j$
+are distinct and, for every $t\in A_j\cup B_j$: (1) $t$ belongs to $M$'s
+vocabulary; (2) $t$ does not occur in $C_j$ under $M$'s tokenizer; and
+(3) $p_j(t)>0$, meaning that $t$ is able to be returned by the provider's LLM
+API during experiment $E_j$.
+
+\emph{Remark.} In practice, fulfilling condition~2 only requires the experimenter to choose
+$C_j$, $A_j$, and $B_j$ such that no token in $A_j\cup B_j$ is a substring of
+$C_j$. Furthermore, condition~3 can be fulfilled by querying the provider's LLM
+API a small number of times and choosing the tokens for $A_j$ and $B_j$ from
+among the first generated tokens returned.
+
+\section{General Form of the Detection Method}
+\label{sec:general-detection-method}
+We first present the general forms of the estimator test and its equivalent hypothesis test for detecting provider-side model configuration tampering. We will later derive concrete special cases of this form and then demonstrate its efficacy in proof-of-concept experiments.
+
+\paragraph{Smooth aggregate estimators.}
+Let $\phi:\mathbb{R}^m\to\mathbb{R}$ be smooth. For $\rho$-regular
+experiments $E_1,\ldots,E_m$, define
+$\widehat{\phi}:=\phi(\gamma_1,\ldots,\gamma_m)$ and
+$\phi^\star:=\phi(\Gamma_1,\ldots,\Gamma_m)$ ($\phi^\star$ is undefined if
+tampering makes the queries within any $E_j$ non-IID).
+
+\begin{theorem}[General asymptotic properties]
+\label{thm:general-asymptotic-properties}
+If the provider's model configuration is untampered and the experiments are
+conducted independently, then, as every $N_j\to\infty$:
+$\widehat{\phi}$ is a consistent estimator of $\phi^\star$;
+$\widehat{\phi}$ is asymptotically normal;
+$\operatorname{Var}(\widehat{\phi})=\Theta(\sum_{j=1}^m N_j^{-1})$; and
+$\operatorname{Bias}(\widehat{\phi})=O(\sum_{j=1}^m N_j^{-1})$.
+\end{theorem}
+
+The proof is deferred to Appendix~\ref{app:general-asymptotic-properties}.
+
+\emph{Remark.} If the $N_j$ are fixed positive proportions of the total query
+count $N=\sum_{j=1}^m N_j$, then
+$\operatorname{Var}(\widehat{\phi})=\Theta(N^{-1})$. Thus, the estimator
+achieves the optimal $1/N$ variance-decay rate available to regular estimators
+\citep{hajek1970characterization}.
+
+\emph{Remark.} The standard deviation
+$\operatorname{SD}(\widehat{\phi})=\Theta(\sqrt{\sum_{j=1}^m N_j^{-1}})$
+asymptotically dominates the bias
+$\operatorname{Bias}(\widehat{\phi})=O(\sum_{j=1}^m N_j^{-1})$. Thus, we may
+treat the bias as negligible in downstream asymptotic analyses.
+
+\paragraph{Tamper-detection tests.}
+We call $(\widehat{\phi},C)$, where $C\in\mathbb{R}$ and $\widehat{\phi}$ is as
+defined above, a \emph{tamper-detection test} if, whenever the provider's model
+configuration is untampered, $\widehat{\phi}$ consistently estimates $C$ as
+every $N_j\to\infty$.
+
+\emph{Remark.} By Theorem~\ref{thm:general-asymptotic-properties}, if the
+provider's model configuration is untampered, then
+$(\widehat{\phi},\phi^\star)$ is a tamper-detection test. However, because
+whether the model configuration is tampered is unknown, $\phi^\star$ cannot
+generally serve as a known reference value. Thus, this construction cannot be
+used in general. In later sections, we show how to construct tamper-detection
+tests with explicitly known reference values.
+
+\paragraph{Detection rule (estimator version).}
+Suppose $(\widehat{\phi},C)$ is a tamper-detection test. We say that a model
+configuration is \emph{detected by estimator} if $\widehat{\phi}$ does not
+converge to $C$ as every $N_j\to\infty$.
+
+\begin{theorem}[100\% long-run detection precision guarantee: estimator version]
+\label{thm:estimator-detection-precision}
+If a model configuration is detected by estimator, then it is always tampered.
+\end{theorem}
+\begin{proof}
+If the model configuration were untampered, $\widehat{\phi}$ would converge to
+$C$ by the definition of a tamper-detection test and hence would not be detected
+by estimator. The claim follows by contraposition.
+\end{proof}
+
+\paragraph{Detection rule (hypothesis-test version).}
+Let $(\widehat{\phi},C)$ be a tamper-detection test. Choose any function
+$\epsilon(N_1,\ldots,N_m)>0$ such that $\epsilon\to0$ and
+$\epsilon/\sqrt{\sum_{j=1}^m N_j^{-1}}\to\infty$ as every
+$N_j\to\infty$. We say that a model configuration is \emph{detected by
+hypothesis testing at $(N_1,\ldots,N_m)$} if
+$|\widehat{\phi}-C|>\epsilon(N_1,\ldots,N_m)$ for fixed
+$N_1,\ldots,N_m$.
+
+\emph{Example.} One valid choice is
+$\epsilon(N_1,\ldots,N_m)=\min(N_1,\ldots,N_m)^{-\alpha}$ for any
+$0<\alpha<1/2$.
+
+\begin{theorem}[100\% long-run detection precision guarantee: hypothesis-test version]
+\label{thm:hypothesis-detection-precision}
+As every $N_j\to\infty$, the probability of an untampered model configuration
+being falsely detected by hypothesis testing converges to $0$.
+\end{theorem}
+
+The proof is deferred to Appendix~\ref{app:hypothesis-detection-precision}.
+
+\section{Theoretical Properties of Untampered Model Configurations}
+Throughout this section, the served model configuration is assumed to be
+\emph{untampered}. We further fix two $\rho$-regular experiments $E_1$ and
+$E_2$ such that $A_1=A_2=(a_1,\ldots,a_k)$ and
+$B_1=B_2=(b_1,\ldots,b_k)$. Because the two experiments share token lists,
+$\Delta b_1=\Delta b_2$; we denote their common value by $\Delta b$.
+
+\subsection{Pairwise-Ratio Invariance}
+
+\begin{theorem}[Pairwise-ratio invariance]
+\label{thm:pairwise-ratio-invariance}
+For each $j\in\{1,2\}$ and $i\in\{1,\ldots,k\}$, the ratio
+$p_j(a_i)/p_j(b_i)$ is invariant under every standard decoding parameter
+except temperature $T$ and the token biases $b(a_i)$ and $b(b_i)$.
+\end{theorem}
+\begin{proof}
+Fix $j\in\{1,2\}$ and $i\in\{1,\ldots,k\}$. First consider top-$p$,
+top-$k$, structured-output enforcement, no-repeat-$n$-gram, min-$p$,
+typical-$p$, Mirostat, Mirostat~2, $\eta$-sampling, tail-free sampling, and
+top-$a$. Each of these parameters retains a subset $S$ of tokens and
+renormalizes their probabilities without changing the relative probabilities
+of the retained tokens. Because $E_j$ is $\rho$-regular, both $a_i$ and $b_i$
+survive every such restriction, and the common renormalization cancels from
+their probability ratio. Thus, these eleven parameters do not affect it.
+
+It remains to consider frequency penalty, presence penalty, and repetition
+penalty. By $\rho$-regularity, neither $a_i$ nor $b_i$ occurs in the context,
+so these parameters leave both logits unchanged. Since these logits are used in
+the calculation of the token probabilities, $p_j(a_i)/p_j(b_i)$ is also unchanged.
+
+The only remaining standard decoding parameters are temperature and token bias,
+which proves the claim.
+\end{proof}
+
+\begin{corollary}
+\label{cor:product-ratio-invariance}
+For each $j\in\{1,2\}$, $\prod_{i=1}^{k}\frac{p_j(a_i)}{p_j(b_i)}$, and
+therefore $\Gamma_j$, is invariant under every standard decoding parameter
+except temperature and token bias.
+\end{corollary}
+\begin{proof}
+Apply Theorem~\ref{thm:pairwise-ratio-invariance} to each factor in the product.
+\end{proof}
+
+\begin{corollary}
+\label{cor:untampered-affine-identity}
+For each $j\in\{1,2\}$, $\Gamma_j=(\Delta z_j+\Delta b)/T$.
+\end{corollary}
+\begin{proof}
+For each $i$, Theorem~\ref{thm:pairwise-ratio-invariance} allows
+$p_j(a_i)/p_j(b_i)$ to be computed using only temperature and token bias.
+For any token $t$,
+$p_j(t)=\exp((z_j(t)+b(t))/T)/\sum_s\exp((z_j(s)+b(s))/T)$, so
+$p_j(a_i)/p_j(b_i)=\exp((z_j(a_i)-z_j(b_i)+b(a_i)-b(b_i))/T)$.
+Taking the product over $i$ and then its logarithm proves the claim.
+\end{proof}
+
+\subsection{Temperature Estimation}
+
+\begin{theorem}
+\label{thm:temperature-recovery}
+The provider's temperature satisfies
+$T=(\Delta z_1-\Delta z_2)/(\Gamma_1-\Gamma_2)$.
+\end{theorem}
+\begin{proof}
+Subtracting Corollary~\ref{cor:untampered-affine-identity} for $j=2$ from the
+same identity for $j=1$ gives
+$\Gamma_1-\Gamma_2=(\Delta z_1-\Delta z_2)/T$.
+\end{proof}
+
+\begin{theorem}
+\label{thm:temperature-estimator}
+As $N_1,N_2\to\infty$,
+$(\Delta z_1-\Delta z_2)/(\gamma_1-\gamma_2)$ is a consistent estimator of $T$.
+\end{theorem}
+\begin{proof}
+This is the special case of Theorem~\ref{thm:general-asymptotic-properties}
+with $\phi(x_1,x_2)=(\Delta z_1-\Delta z_2)/(x_1-x_2)$.
+\end{proof}
+
+\subsection{Logit Bias Delta Estimation}
+
+\begin{theorem}
+\label{thm:bias-recovery}
+The aggregate token-bias difference satisfies
+$\Delta b=(\Gamma_2\Delta z_1-\Gamma_1\Delta z_2)/(\Gamma_1-\Gamma_2)$.
+\end{theorem}
+\begin{proof}
+Substituting Corollary~\ref{cor:untampered-affine-identity} into the right-hand
+side and simplifying gives $\Delta b$.
+\end{proof}
+
+\begin{theorem}
+\label{thm:bias-estimator}
+As $N_1,N_2\to\infty$,
+$(\gamma_2\Delta z_1-\gamma_1\Delta z_2)/(\gamma_1-\gamma_2)$ is a consistent
+estimator of $\Delta b$.
+\end{theorem}
+\begin{proof}
+This is the special case of Theorem~\ref{thm:general-asymptotic-properties}
+with $\phi(x_1,x_2)=(x_2\Delta z_1-x_1\Delta z_2)/(x_1-x_2)$.
+\end{proof}
+
+\emph{Remark.} Taking $k=1$ and repeating the construction for multiple token
+pairs recovers their relative token biases. In particular, fixing a reference
+token $r$ allows $b(t)-b(r)$ to be estimated for each target token $t$.
+Therefore, token biases are identifiable up to a common additive constant; if
+an anchor such as a known zero-bias token is available, their absolute values
+are also recoverable.
+
+\section{Concrete Tamper-Detection Test Examples}
+In this section, we construct two simple concrete examples of the tamper-detection tests defined in Section~\ref{sec:general-detection-method} (\nameref{sec:general-detection-method}).
+
+\paragraph{Two-experiment estimators.}
+If $E_{j_1}$ and $E_{j_2}$ are $\rho$-regular experiments satisfying
+$A_{j_1}=A_{j_2}$ and $B_{j_1}=B_{j_2}$, then we define two estimators:
+\begin{align*}
+\widehat{T}_{j_1,j_2}
+&:=\frac{\Delta z_{j_1}-\Delta z_{j_2}}
+        {\gamma_{j_1}-\gamma_{j_2}},\\
+\widehat{\Delta b}_{j_1,j_2}
+&:=\frac{\gamma_{j_2}\Delta z_{j_1}-\gamma_{j_1}\Delta z_{j_2}}
+        {\gamma_{j_1}-\gamma_{j_2}}.
+\end{align*}
+
+We immediately obtain the following two tamper-detection tests, which inherit
+the 100\% long-run
+detection precision guarantees from
+Theorems~\ref{thm:estimator-detection-precision}
+and~\ref{thm:hypothesis-detection-precision}.
+
+\subsection{Temperature Test}
+
+\begin{theorem}
+\label{thm:temperature-test}
+Let $E_i,E_j,E_k,E_\ell$ be $\rho$-regular experiments satisfying
+$A_i=A_j$, $B_i=B_j$, $A_k=A_\ell$, and $B_k=B_\ell$. Then
+$(\widehat{T}_{i,j}-\widehat{T}_{k,\ell},0)$ is a valid tamper-detection test.
+\end{theorem}
+\begin{proof}
+Applying Theorem~\ref{thm:temperature-estimator} to $(E_i,E_j)$ and
+$(E_k,E_\ell)$, if the provider's model configuration is untampered, then
+$\widehat{T}_{i,j}$ and $\widehat{T}_{k,\ell}$ both consistently estimate $T$.
+Their difference therefore consistently estimates $0$, so the result follows
+from the definition of a tamper-detection test.
+\end{proof}
+
+\emph{Remark.} Except where doing so makes an estimator degenerate, the indices
+$i,j,k,\ell$ need not be distinct.
+
+\subsection{Logit Bias Delta Test}
+
+\begin{theorem}
+\label{thm:logit-bias-delta-test}
+Let $E_i,E_j,E_k,E_\ell$ be $\rho$-regular experiments satisfying
+$A_i=A_j=A_k=A_\ell$ and $B_i=B_j=B_k=B_\ell$. Then
+$(\widehat{\Delta b}_{i,j}-\widehat{\Delta b}_{k,\ell},0)$ is a valid
+tamper-detection test.
+\end{theorem}
+\begin{proof}
+Applying Theorem~\ref{thm:bias-estimator} to $(E_i,E_j)$ and $(E_k,E_\ell)$,
+if the provider's model configuration is untampered, then
+$\widehat{\Delta b}_{i,j}$ and $\widehat{\Delta b}_{k,\ell}$ both consistently
+estimate $\Delta b$. Their difference therefore consistently estimates $0$,
+so the result follows from the definition of a tamper-detection test.
+\end{proof}
+
+\emph{Remark.} Except where doing so makes an estimator degenerate, the indices
+$i,j,k,\ell$ need not be distinct.
+
+\subsection{On Recall}
+
+Although perfect long-run detection recall is not guaranteed for these tests, it is
+intuitive why a malicious provider may find them difficult to spoof: (1) the
+many possible tests force an effective spoof to satisfy a complex constraint
+satisfaction problem; and (2) making the two separate temperature (or logit-bias-
+delta) estimates equal would likely reflect either an implausible coincidence or
+deliberate engineering. We furthermore present a toy argument in
+Appendix~\ref{app:toy-spoofing} that is suggestive of the difficulty of strong
+adversarial spoofing, but we do not make claims about its universality.
+
+\section{Empirical Proof of Concept}
+
+\section{Conclusion}
+
+For expository clarity, we associated each experiment $E_j$ with a single
+$\gamma_j$ that used all elements of $A_j$ and $B_j$. This restriction was
+stronger and more practically limiting than was logically required by our
+proofs. A single experiment $E_j$ can instead produce multiple $\gamma$
+statistics, each using only subsets of $A_j$ and $B_j$, provided that
+the one-to-one correspondence between the selected $a$'s and $b$'s is
+preserved. Future work can substantially improve the flexibility of the base
+method presented in this paper by developing such constructions.
+
+\subsection*{AI use statement}
+
+GPT-5.6 Sol was used to edit the exposition of this paper and generate
+boilerplate code for the proof-of-concept experiments. The research problem,
+core ideas, theoretical results, proofs, and overall research direction were
+developed by the author. All AI-assisted text and code were reviewed and
+verified by the author, who takes full responsibility for the final content of
+this work.
+
+\bibliography{references}
+\bibliographystyle{plainnat}
+
+\appendix
+
+\section{Appendix}
+
+\subsection{General Asymptotic Properties}
+\label{app:general-asymptotic-properties}
+
+\paragraph{Proof of consistency.}
+Fix $r\in\{1,\ldots,m\}$. For each $\ell\in\{1,\ldots,k_r\}$, the
+multinomial law gives $n_r(a_{\ell,r})/N_r\to p_r(a_{\ell,r})$ and
+$n_r(b_{\ell,r})/N_r\to p_r(b_{\ell,r})$. Hence
+$n_r(a_{\ell,r})/n_r(b_{\ell,r})
+=[n_r(a_{\ell,r})/N_r]/[n_r(b_{\ell,r})/N_r]
+\to p_r(a_{\ell,r})/p_r(b_{\ell,r})$. Taking the
+product over $\ell$ and then its logarithm gives $\gamma_r\to\Gamma_r$. Since
+$r$ was arbitrary and
+$\phi$ is smooth and therefore continuous,
+$\widehat{\phi}=\phi(\gamma_1,\ldots,\gamma_m)\to
+\phi(\Gamma_1,\ldots,\Gamma_m)=\phi^\star$, proving consistency.
+
+\paragraph{Proof of asymptotic normality.}
+First, note that by the law of large numbers, for every $r$ and $i$,
+$n_r(a_{i,r})/N_r\to p_r(a_{i,r})$ and
+$n_r(b_{i,r})/N_r\to p_r(b_{i,r})$ as $N_r\to\infty$. Define
+$X_{i,r}=n_r(a_{i,r})/N_r$ and $Y_{i,r}=n_r(b_{i,r})/N_r$.
+
+Thus far, we have been treating the $\gamma_r$ as the atomic building blocks
+of $\phi(\gamma_1,\ldots,\gamma_m)$, but there are objects that are even more
+granular: the $n_r(a_{i,r})$ and $n_r(b_{i,r})$. Recall that
+\[
+\gamma_r=\ln\!\left(\prod_{i=1}^{k_r}
+\frac{n_r(a_{i,r})}{n_r(b_{i,r})}\right)
+=\sum_{i=1}^{k_r}\ln n_r(a_{i,r})
+-\sum_{i=1}^{k_r}\ln n_r(b_{i,r}).
+\]
+Thus, we may view $\phi(\gamma_1,\ldots,\gamma_m)$ as a function of the
+$n_r(a_{i,r})$ and $n_r(b_{i,r})$, or equivalently as a function of the
+$X_{i,r}$ and $Y_{i,r}$.
+
+We wish to apply the delta method to $\phi(\gamma_1,\ldots,\gamma_m)$ as a
+function of the $X_{i,r}$ and $Y_{i,r}$, but we must first ensure that it is a
+fixed function that does not depend on the $N_r$. Fix $r$ and consider index
+$i$ in the summation above. Then
+\[
+\ln n_r(a_{i,r})-\ln n_r(b_{i,r})
+=\ln(N_rX_{i,r})-\ln(N_rY_{i,r})
+=\ln X_{i,r}-\ln Y_{i,r}.
+\]
+Thus, each term in the summation defining $\gamma_r$ does not depend on
+$N_r$. Therefore, each $\gamma_r$, and hence
+$\phi(\gamma_1,\ldots,\gamma_m)$, is a fixed function of the $X_{i,r}$ and
+$Y_{i,r}$.
+
+We may now apply the delta method:
+\begin{align*}
+\phi(\gamma_1,\ldots,\gamma_m)
+\approx c
+&+\sum_{r=1}^{m}\sum_{i=1}^{k_r}d_{i,r}
+\left(X_{i,r}-p_r(a_{i,r})\right)\\
+&+\sum_{r=1}^{m}\sum_{i=1}^{k_r}e_{i,r}
+\left(Y_{i,r}-p_r(b_{i,r})\right)
+\end{align*}
+as $N_1,\ldots,N_m\to\infty$, for some fixed constants $c$, $d_{i,r}$, and
+$e_{i,r}$. For each $r$, the quantity
+\[
+\sum_{i=1}^{k_r}d_{i,r}X_{i,r}
++\sum_{i=1}^{k_r}e_{i,r}Y_{i,r}
+\]
+is independent of the corresponding quantities for the other experiments.
+Therefore, to prove asymptotic normality of
+$\phi(\gamma_1,\ldots,\gamma_m)$, it suffices to prove that this quantity is
+asymptotically normal for each $r$.
+
+We have
+\[
+\sum_{i=1}^{k_r}d_{i,r}X_{i,r}
++\sum_{i=1}^{k_r}e_{i,r}Y_{i,r}
+=\sum_{i=1}^{k_r}d_{i,r}\frac{n_r(a_{i,r})}{N_r}
++\sum_{i=1}^{k_r}e_{i,r}\frac{n_r(b_{i,r})}{N_r}.
+\]
+Write each $n_r(a_{i,r})$ as a sum of IID indicator random variables
+$I_{q,r}(a_{i,r})$ for $q=1,\ldots,N_r$, which record whether $a_{i,r}$ was
+the first generated token returned on query $q$ of experiment $E_r$. Define
+$I_{q,r}(b_{i,r})$ similarly. We now have
+\begin{align*}
+&\sum_{i=1}^{k_r}d_{i,r}\frac{n_r(a_{i,r})}{N_r}
++\sum_{i=1}^{k_r}e_{i,r}\frac{n_r(b_{i,r})}{N_r}\\
+&=\frac{1}{N_r}\sum_{q=1}^{N_r}
+\left(\sum_{i=1}^{k_r}d_{i,r}I_{q,r}(a_{i,r})
++\sum_{i=1}^{k_r}e_{i,r}I_{q,r}(b_{i,r})\right).
+\end{align*}
+Take
+\[
+Z_{q,r}=\sum_{i=1}^{k_r}d_{i,r}I_{q,r}(a_{i,r})
++\sum_{i=1}^{k_r}e_{i,r}I_{q,r}(b_{i,r}).
+\]
+Note that the $Z_{q,r}$ are IID. The expression then becomes
+$N_r^{-1}\sum_{q=1}^{N_r}Z_{q,r}$, which is asymptotically normal by the
+central limit theorem. This completes the proof.
+
+\paragraph{Proof of the variance rate.}
+From the proof of asymptotic normality, we see that as
+$N_1,\ldots,N_m\to\infty$, $\phi(\gamma_1,\ldots,\gamma_m)$ can be written,
+up to an additive constant, as
+\[
+\sum_{r=1}^{m}\left(
+\sum_{i=1}^{k_r}d_{i,r}X_{i,r}
++\sum_{i=1}^{k_r}e_{i,r}Y_{i,r}
+\right)
+=\sum_{r=1}^{m}\left(
+\frac{1}{N_r}\sum_{q=1}^{N_r}Z_{q,r}
+\right).
+\]
+Since the experiments are statistically independent, we have
+\begin{align*}
+\operatorname{Var}\!\left(\phi(\gamma_1,\ldots,\gamma_m)\right)
+&=\operatorname{Var}\!\left(
+\sum_{r=1}^{m}\frac{1}{N_r}\sum_{q=1}^{N_r}Z_{q,r}
+\right)\\
+&=\sum_{r=1}^{m}\operatorname{Var}\!\left(
+\frac{1}{N_r}\sum_{q=1}^{N_r}Z_{q,r}
+\right).
+\end{align*}
+Since the $Z_{q,r}$ are IID for any given $r$, give
+$Z_{q,r}$, $q=1,\ldots,N_r$, the common variance $v_r$. Then
+\[
+\sum_{r=1}^{m}\operatorname{Var}\!\left(
+\frac{1}{N_r}\sum_{q=1}^{N_r}Z_{q,r}
+\right)
+=\sum_{r=1}^{m}\frac{v_r}{N_r}
+=\Theta\!\left(\sum_{r=1}^{m}\frac{1}{N_r}\right).
+\]
+
+\paragraph{Proof of the bias rate.}
+\emph{First, we show that
+$\mathbb{E}[\gamma_r]-\Gamma_r=O(N_r^{-1})$ for every $r$.}
+Recall that
+\[
+\gamma_r=\sum_{i=1}^{k_r}\ln X_{i,r}
+-\sum_{i=1}^{k_r}\ln Y_{i,r}.
+\]
+Then
+\begin{align*}
+\mathbb{E}[\gamma_r]-\Gamma_r
+={}&\sum_{i=1}^{k_r}\mathbb{E}[\ln X_{i,r}]
+-\sum_{i=1}^{k_r}\mathbb{E}[\ln Y_{i,r}]\\
+&-\left(\sum_{i=1}^{k_r}\ln p_r(a_{i,r})
+-\sum_{i=1}^{k_r}\ln p_r(b_{i,r})\right)\\
+={}&\sum_{i=1}^{k_r}
+\left(\mathbb{E}[\ln X_{i,r}]-\ln p_r(a_{i,r})\right)
+-\sum_{i=1}^{k_r}
+\left(\mathbb{E}[\ln Y_{i,r}]-\ln p_r(b_{i,r})\right).
+\end{align*}
+Since $k_r$ is fixed, it suffices to show that each
+$\mathbb{E}[\ln X_{i,r}]-\ln p_r(a_{i,r})$ and each
+$\mathbb{E}[\ln Y_{i,r}]-\ln p_r(b_{i,r})$ term is $O(N_r^{-1})$. We show
+this for $\mathbb{E}[\ln X_{i,r}]-\ln p_r(a_{i,r})$; the proof for the
+$Y_{i,r}$ case is identical.
+
+We have by the 2nd-order Taylor approximation that:
+\[
+\ln X_{i,r}=\ln p_r(a_{i,r})
++\frac{X_{i,r}-p_r(a_{i,r})}{p_r(a_{i,r})}
+-\frac{(X_{i,r}-p_r(a_{i,r}))^2}{2p_r(a_{i,r})^2}+R_{i,r}.
+\]
+Thus, we have:
+\begin{align*}
+\mathbb{E}[\ln X_{i,r}]-\ln p_r(a_{i,r})
+={}&\frac{1}{p_r(a_{i,r})}
+\mathbb{E}[X_{i,r}-p_r(a_{i,r})]\\
+&-\frac{1}{2p_r(a_{i,r})^2}
+\mathbb{E}[(X_{i,r}-p_r(a_{i,r}))^2]
++\mathbb{E}[R_{i,r}].
+\end{align*}
+Here are some standard facts from binomial distributions:
+\begin{itemize}
+    \item $\mathbb{E}[(X_{i,r}-p_r(a_{i,r}))^2]=O(N_r^{-1})$.
+    \item $\mathbb{E}[|X_{i,r}-p_r(a_{i,r})|^3]=O(N_r^{-3/2})$.
+\end{itemize}
+Note that the first term is simply $0$. Furthermore, the second term is
+$O(N_r^{-1})$.
+$|R_{i,r}|=O(|X_{i,r}-p_r(a_{i,r})|^3)$ follows from a standard bound for
+Taylor polynomial remainders. Thus,
+\[
+|\mathbb{E}[R_{i,r}]|
+\leq\mathbb{E}[|R_{i,r}|]
+=O\!\left(\mathbb{E}[|X_{i,r}-p_r(a_{i,r})|^3]\right).
+\]
+Therefore, $|\mathbb{E}[R_{i,r}]|=O(N_r^{-3/2})=O(N_r^{-1})$. Therefore,
+$\mathbb{E}[\ln X_{i,r}]-\ln p_r(a_{i,r})=O(N_r^{-1})$.
+This proves that $\mathbb{E}[\gamma_r]-\Gamma_r=O(N_r^{-1})$.
+
+Let $\boldsymbol{\gamma}=(\gamma_1,\ldots,\gamma_m)^\top$ and
+$\boldsymbol{\Gamma}=(\Gamma_1,\ldots,\Gamma_m)^\top$. By the 2nd-order
+Taylor approximation, we have that:
+\[
+\phi(\boldsymbol{\gamma})
+=\phi(\boldsymbol{\Gamma})
++\nabla\phi(\boldsymbol{\Gamma})^\top
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})
++\frac{1}{2}(\boldsymbol{\gamma}-\boldsymbol{\Gamma})^\top
+H_\phi(\boldsymbol{\Gamma})
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})+R.
+\]
+Thus, we have:
+\begin{align*}
+\mathbb{E}[\phi(\boldsymbol{\gamma})]-\phi(\boldsymbol{\Gamma})
+={}&\nabla\phi(\boldsymbol{\Gamma})^\top
+\mathbb{E}[\boldsymbol{\gamma}-\boldsymbol{\Gamma}]\\
+&+\mathbb{E}\!\left[\frac{1}{2}
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})^\top
+H_\phi(\boldsymbol{\Gamma})
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})\right]
++\mathbb{E}[R].
+\end{align*}
+We have
+\[
+\nabla\phi(\boldsymbol{\Gamma})^\top
+\mathbb{E}[\boldsymbol{\gamma}-\boldsymbol{\Gamma}]
+=O\!\left(\sum_{r=1}^m\frac{1}{N_r}\right)
+\]
+because $\mathbb{E}[\gamma_r]-\Gamma_r=O(N_r^{-1})$ for every $r$. We have:
+\begin{align*}
+\left|\mathbb{E}\!\left[\frac{1}{2}
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})^\top
+H_\phi(\boldsymbol{\Gamma})
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})\right]\right|
+&\leq \mathbb{E}\!\left[\frac{1}{2}
+\left|(\boldsymbol{\gamma}-\boldsymbol{\Gamma})^\top
+H_\phi(\boldsymbol{\Gamma})
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})\right|\right]\\
+&\leq \frac{1}{2}\lVert H_\phi(\boldsymbol{\Gamma})\rVert_2
+\mathbb{E}\!\left[\lVert
+\boldsymbol{\gamma}-\boldsymbol{\Gamma}\rVert_2^2\right]\\
+&=\mathrm{const}\cdot\sum_{r=1}^m
+\mathbb{E}[(\gamma_r-\Gamma_r)^2].
+\end{align*}
+We then have
+\begin{align*}
+\mathbb{E}[(\gamma_r-\Gamma_r)^2]
+&=\operatorname{Var}(\gamma_r-\Gamma_r)
++\mathbb{E}[\gamma_r-\Gamma_r]^2\\
+&=\operatorname{Var}(\gamma_r)+O(N_r^{-2})
+\quad\text{(since $\mathbb{E}[\gamma_r]-\Gamma_r=O(N_r^{-1})$)}\\
+&=O(N_r^{-1})+O(N_r^{-2})\\
+&=O(N_r^{-1}).
+\end{align*}
+Here, $\operatorname{Var}(\gamma_r)=O(N_r^{-1})$ follows by applying the
+preceding variance calculation to the identity estimator for $E_r$.
+Thus,
+\[
+\left|\mathbb{E}\!\left[\frac{1}{2}
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})^\top
+H_\phi(\boldsymbol{\Gamma})
+(\boldsymbol{\gamma}-\boldsymbol{\Gamma})\right]\right|
+=O\!\left(\sum_{r=1}^m\frac{1}{N_r}\right).
+\]
+
+$|R|=O(\lVert\boldsymbol{\gamma}-\boldsymbol{\Gamma}\rVert_2^3)$ follows
+from a standard bound for Taylor polynomial remainders. Then
+\begin{align*}
+|\mathbb{E}[R]|
+&\leq\mathbb{E}[|R|]\\
+&=\mathbb{E}\!\left[O\!\left(
+\lVert\boldsymbol{\gamma}-\boldsymbol{\Gamma}\rVert_2^3\right)\right]\\
+&\leq\mathbb{E}\!\left[O\!\left(
+\left(\sum_{r=1}^m|\gamma_r-\Gamma_r|\right)^3\right)\right].
+\end{align*}
+The multinomial third-moment bound, applied to the smooth log-ratio defining
+$\gamma_r$, gives
+$\mathbb{E}[|\gamma_r-\Gamma_r|^3]=O(N_r^{-3/2})$. Since
+$(\sum_{r=1}^m x_r)^3\leq m^2\sum_{r=1}^m x_r^3$ for nonnegative $x_r$,
+\begin{align*}
+|\mathbb{E}[R]|
+&=O\!\left(\sum_{r=1}^m
+\mathbb{E}[|\gamma_r-\Gamma_r|^3]\right)\\
+&=O\!\left(\sum_{r=1}^mN_r^{-3/2}\right)\\
+&=O\!\left(\sum_{r=1}^mN_r^{-1}\right),
+\end{align*}
+where $m$ is fixed. Thus,
+$|\mathbb{E}[R]|=O(\sum_{r=1}^mN_r^{-1})$. We conclude that
+\[
+\mathbb{E}[\phi(\boldsymbol{\gamma})]-\phi(\boldsymbol{\Gamma})
+=O\!\left(\sum_{r=1}^m\frac{1}{N_r}\right).
+\]
+
+This completes the proof.
+
+\subsection{Long-Run Detection Precision for Hypothesis Testing}
+\label{app:hypothesis-detection-precision}
+
+\begin{proof}[Proof of Theorem~\ref{thm:hypothesis-detection-precision}]
+Assume that the provider's model configuration is untampered. By the definition
+of a tamper-detection test, $\widehat{\phi}\to C$ as every $N_j\to\infty$.
+Theorem~\ref{thm:general-asymptotic-properties} also gives
+$\widehat{\phi}\to\phi^\star$, so $C=\phi^\star$. The theorem further gives
+that $\widehat{\phi}$ is asymptotically normal and
+$\operatorname{SD}(\widehat{\phi})=
+\Theta(\sqrt{\sum_{j=1}^m N_j^{-1}})$. Furthermore, its standard deviation
+asymptotically dominates its bias, so the bias is negligible here.
+
+Let $X\sim\mathcal{N}(0,\sigma^2)$. Fix $p\in(1/2,1)$, and let
+$q_p(\sigma)=\inf\{x:\Pr(X\leq x)\geq p\}$ be the $p$-quantile of $X$.
+Then $q_p(\sigma)=z_p\sigma$, where $z_p=\Phi^{-1}(p)$ and $\Phi$ is the
+standard normal CDF. Indeed, for $Z\sim\mathcal{N}(0,1)$,
+$\Pr(X\leq x)=\Pr(Z\leq x/\sigma)$, so
+$\Pr(X\leq q_p(\sigma))=p$ is equivalent to
+$\Pr(Z\leq q_p(\sigma)/\sigma)=p$, and hence
+$q_p(\sigma)/\sigma=\Phi^{-1}(p)$.
+
+Apply this calculation to the asymptotic normal approximation of
+$\widehat{\phi}-\mathbb{E}[\widehat{\phi}]$, with
+$\sigma=\operatorname{SD}(\widehat{\phi})$. Its $(1-p)$- and $p$-quantiles
+are therefore asymptotic to
+$z_{1-p}\operatorname{SD}(\widehat{\phi})$ and
+$z_p\operatorname{SD}(\widehat{\phi})$, respectively. Moreover,
+$\mathbb{E}[\widehat{\phi}]-C=o(\operatorname{SD}(\widehat{\phi}))$ because
+the standard deviation asymptotically dominates the bias. Therefore, the
+$(1-p)$- and $p$-quantiles of $\widehat{\phi}-C$ converge to $0$ at rate
+$\Theta(\sqrt{\sum_{j=1}^m N_j^{-1}})$. Since the hypothesis test enforces
+\[
+\frac{\epsilon(N_1,\ldots,N_m)}
+{\sqrt{\sum_{j=1}^m N_j^{-1}}}\to\infty,
+\]
+$\epsilon(N_1,\ldots,N_m)$ converges to $0$ more slowly than both tail
+quantiles. Thus, as every $N_j\to\infty$, both tail quantiles lie within
+$[-\epsilon(N_1,\ldots,N_m),\epsilon(N_1,\ldots,N_m)]$, so
+$\Pr(|\widehat{\phi}-C|>\epsilon(N_1,\ldots,N_m))
+\leq 1-[p-(1-p)]=2(1-p)$. Because $p$ may be chosen arbitrarily close to
+$1$, this probability converges to $0$.
+\end{proof}
+
+\subsection{Why Strong Spoofing Is Difficult: A Toy Argument}
+\label{app:toy-spoofing}
+
+Although 100\% long-run detection recall is not formally guaranteed by this
+method, the following illustrative toy argument suggests a malicious
+provider may find it difficult to strongly spoof the tamper-detection test. We
+consider the Temperature Test from Theorem~\ref{thm:temperature-test} for this example. To avoid
+making the tampering obvious, suppose that the malicious provider uses the same
+vocabulary as $M$ and keeps the queries within each experiment IID. Suppose furthermore
+that, during experiment $E_i$, the
+probability that the first generated token returned is $t$ is
+\[
+p_i(t)=\frac{\exp((\widetilde{z}_i(t)+b(t))/T)}
+{\sum_{t'\in S_i}\exp((\widetilde{z}_i(t')+b(t'))/T)},
+\]
+where $S_i$ is the set of tokens retained after truncation.
+
+Suppose that the provider strongly spoofs the Temperature Test: in the long-run
+limit, it passes every valid instance of the test. Choose arbitrary
+$\rho$-regular experiments $E_i,E_j,E_k,E_\ell$ with
+$A_i=A_j=(a)$, $B_i=B_j=(b)$, $A_k=A_\ell=(c)$, and
+$B_k=B_\ell=(d)$. By Theorem~\ref{thm:temperature-test}, passing this instance
+requires
+\[
+\frac{(z_i(a)-z_i(b))-(z_j(a)-z_j(b))}{\Gamma_i-\Gamma_j}
+=
+\frac{(z_k(c)-z_k(d))-(z_\ell(c)-z_\ell(d))}
+     {\Gamma_k-\Gamma_\ell}.
+\]
+For experiment $E_i$, the probability ratio is
+\begin{align*}
+\frac{p_i(a)}{p_i(b)}
+&=\frac{\exp((\widetilde{z}_i(a)+b(a))/T)}
+        {\sum_{t'\in S_i}\exp((\widetilde{z}_i(t')+b(t'))/T)}
+  \frac{\sum_{t'\in S_i}\exp((\widetilde{z}_i(t')+b(t'))/T)}
+       {\exp((\widetilde{z}_i(b)+b(b))/T)}\\
+&=\exp\!\left(
+\frac{\widetilde{z}_i(a)-\widetilde{z}_i(b)+b(a)-b(b)}{T}
+\right).
+\end{align*}
+Because $A_i=(a)$ and $B_i=(b)$, it follows that
+\[
+\Gamma_i=\ln\!\left(\frac{p_i(a)}{p_i(b)}\right)
+=\frac{\widetilde{z}_i(a)-\widetilde{z}_i(b)+b(a)-b(b)}{T}.
+\]
+Applying the same calculation to the remaining experiments and subtracting
+within each experiment pair gives
+\begin{align*}
+\Gamma_i-\Gamma_j
+&=\frac{(\widetilde{z}_i(a)-\widetilde{z}_i(b))-
+        (\widetilde{z}_j(a)-\widetilde{z}_j(b))}{T},\\
+\Gamma_k-\Gamma_\ell
+&=\frac{(\widetilde{z}_k(c)-\widetilde{z}_k(d))-
+        (\widetilde{z}_\ell(c)-\widetilde{z}_\ell(d))}{T},
+\end{align*}
+where $b(a)-b(b)$ cancels from the first subtraction and $b(c)-b(d)$
+cancels from the second.
+Substituting these expressions into the temperature-test equality gives
+\[
+T\frac{(z_i(a)-z_i(b))-(z_j(a)-z_j(b))}
+{(\widetilde{z}_i(a)-\widetilde{z}_i(b))-
+ (\widetilde{z}_j(a)-\widetilde{z}_j(b))}
+=
+T\frac{(z_k(c)-z_k(d))-(z_\ell(c)-z_\ell(d))}
+{(\widetilde{z}_k(c)-\widetilde{z}_k(d))-
+ (\widetilde{z}_\ell(c)-\widetilde{z}_\ell(d))}.
+\]
+Canceling $T$ and taking reciprocals gives
+\[
+\frac{(\widetilde{z}_i(a)-\widetilde{z}_i(b))-
+      (\widetilde{z}_j(a)-\widetilde{z}_j(b))}
+     {(z_i(a)-z_i(b))-(z_j(a)-z_j(b))}
+=
+\frac{(\widetilde{z}_k(c)-\widetilde{z}_k(d))-
+      (\widetilde{z}_\ell(c)-\widetilde{z}_\ell(d))}
+     {(z_k(c)-z_k(d))-(z_\ell(c)-z_\ell(d))}.
+\]
+Strong spoofing requires the displayed equality to hold for every two valid
+choices of experiment pairs and token pairs. Every such ratio must therefore
+equal every other such ratio, so they share one common value $\lambda$.
+Therefore, for every covered choice of $i,j,a,b$,
+\[
+(\widetilde{z}_i(a)-\widetilde{z}_i(b))-
+(\widetilde{z}_j(a)-\widetilde{z}_j(b))
+=\lambda\bigl((z_i(a)-z_i(b))-(z_j(a)-z_j(b))\bigr).
+\]
+Grouping the terms by experiment gives
+\[
+[\widetilde{z}_i(a)-\lambda z_i(a)]-
+[\widetilde{z}_i(b)-\lambda z_i(b)]
+=
+[\widetilde{z}_j(a)-\lambda z_j(a)]-
+[\widetilde{z}_j(b)-\lambda z_j(b)].
+\]
+Fix a reference experiment $E_{i_0}$ and token $t_0$. Taking $a=t$, $b=t_0$,
+and $j=i_0$ gives
+\[
+\widetilde{z}_i(t)-\lambda z_i(t)
+= [\widetilde{z}_i(t_0)-\lambda z_i(t_0)]
++ [\widetilde{z}_{i_0}(t)-\lambda z_{i_0}(t)]
+- [\widetilde{z}_{i_0}(t_0)-\lambda z_{i_0}(t_0)].
+\]
+The first bracket on the right depends only on $i$, while the difference of the
+remaining two brackets depends only on $t$. Defining
+\[
+f(i):=\widetilde{z}_i(t_0)-\lambda z_i(t_0),
+\qquad
+g(t):=[\widetilde{z}_{i_0}(t)-\lambda z_{i_0}(t)]
+-[\widetilde{z}_{i_0}(t_0)-\lambda z_{i_0}(t_0)]
+\]
+therefore yields
+\[
+\widetilde{z}_i(t)=\lambda z_i(t)+f(i)+g(t).
+\]
+
+The functions $f$ and $g$ are otherwise generic: $f(i)$ depends only on the
+experiment index, whereas $g(t)$ depends only on the token.
+
+For $\lambda>0$, define $c(t)=(g(t)+b(t))/\lambda$. Then
+\begin{align*}
+p_i(t)
+&=\frac{\exp((\lambda z_i(t)+f(i)+g(t)+b(t))/T)}
+        {\sum_{t'\in S_i}\exp((\lambda z_i(t')+f(i)+g(t')+b(t'))/T)}\\
+&=\frac{\exp((\lambda z_i(t)+g(t)+b(t))/T)}
+        {\sum_{t'\in S_i}\exp((\lambda z_i(t')+g(t')+b(t'))/T)}\\
+&=\frac{\exp((z_i(t)+c(t))/(T/\lambda))}
+        {\sum_{t'\in S_i}\exp((z_i(t')+c(t'))/(T/\lambda))}.
+\end{align*}
+The served distribution is therefore obtained by applying an effective
+temperature $T/\lambda$, a token bias $c(t)$, and some unspecified truncation
+rule to the expected model's logits. Under appropriate coverage assumptions on the tested
+tokens and regularity assumptions on the type of truncation used by the
+provider, spoofing every valid Temperature Test requires reproducing
+the expected model configuration's exact behavior for the first generated token returned up to
+standard decoding parameters, when $\lambda>0$. As the old adage says,
+``if it walks like a duck and quacks like a duck, it is a duck.'' Going by this wisdom, regardless of the internals of the served model configuration, if it externally
+behaves identically to the expected model configuration up to standard decoding parameters, it would
+functionally not constitute tampering in the first place, and the malicious
+provider would have failed in its fundamental objective.
+
+\end{document}
