@@ -288,6 +288,8 @@ among the first generated tokens returned.
 \label{sec:general-detection-method}
 We first present the general forms of the estimator test and its equivalent hypothesis test for detecting provider-side model configuration tampering. We will later derive concrete special cases of this form and then demonstrate its efficacy in proof-of-concept experiments.
 
+\subsection{Formal Guarantees}
+
 \paragraph{Smooth aggregate estimators.}
 Let $\phi:\mathbb{R}^m\to\mathbb{R}$ be smooth. For $\rho$-regular
 experiments $E_1,\ldots,E_m$, define
@@ -368,6 +370,21 @@ being falsely detected via hypothesis testing converges to $0$.
 \end{theorem}
 
 The proof is deferred to Appendix~\ref{app:hypothesis-detection-precision}.
+
+\subsection{On Recall, Part 1}
+\label{sec:on-recall-part-1}
+
+We note that, under appropriate regularity conditions, for a given
+tamper-detection test $(\widehat{\phi},C)$, the solution set of
+$\phi(\Gamma_1,\ldots,\Gamma_m)=C$ has Lebesgue measure $0$. Therefore, if one
+assumes a continuous probabilistic prior for the first-token probability vector
+of a malicious provider's model configuration, then the probability of that
+model configuration being detected via estimation is $1$ (i.e., 100\% long-run
+detection recall). However, unlike the precision guarantee, this recall
+guarantee requires assuming that the adversarial provider cannot deliberately
+spoof the test, the feasibility of which remains an open question. In
+Section~\ref{sec:on-recall-part-2}, we further discuss the hypothesized difficulty of
+adversarial spoofing.
 
 \section{Theoretical Properties of Untampered Model Configurations}
 Throughout this section, the served model configuration is assumed to be
@@ -539,16 +556,17 @@ so the result follows from the definition of a tamper-detection test.
 \emph{Remark.} Except where doing so makes an estimator degenerate, the indices
 $i,j,k,\ell$ need not be distinct.
 
-\subsection{On Recall}
+\subsection{On Recall, Part 2}
+\label{sec:on-recall-part-2}
 
-Although perfect long-run detection recall is not guaranteed for these tests, it is
-intuitive why a malicious provider may find them difficult to spoof: (1) the
-many possible tests force an effective spoof to satisfy a complex constraint
-satisfaction problem; and (2) making the two separate temperature (or logit-bias-
+Although perfect long-run detection recall is not formally guaranteed for these tests, it is
+intuitive why a malicious provider may find them difficult to spoof. The
+existence of many possible tests forces an effectively spoofed model configuration to satisfy a constraint
+satisfaction problem requiring repeatedly landing on multiple Lebesgue measure 0 sets. Thus, making the two separate temperature (or logit-bias-
 delta) estimates equal would likely reflect either an implausible coincidence or
 deliberate engineering. We furthermore present a toy argument in
 Appendix~\ref{app:toy-spoofing} that is suggestive of the difficulty of strong
-adversarial spoofing, but we do not make claims about its universality.
+adversarial spoofing, although we do not make claims about its universality.
 
 \section{Empirical Proof of Concept}
 
