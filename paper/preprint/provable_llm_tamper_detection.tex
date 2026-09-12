@@ -335,12 +335,12 @@ tests with explicitly known reference values.
 
 \paragraph{Detection rule (estimator version).}
 Suppose $(\widehat{\phi},C)$ is a tamper-detection test. We say that a model
-configuration is \emph{detected by estimator} if $\widehat{\phi}$ does not
+configuration is \emph{detected via estimation} if $\widehat{\phi}$ fails to
 converge to $C$ as every $N_j\to\infty$.
 
 \begin{theorem}[100\% long-run detection precision guarantee: estimator version]
 \label{thm:estimator-detection-precision}
-If a model configuration is detected by estimator, then it is always tampered.
+If a model configuration is detected via estimation, then it is always tampered.
 \end{theorem}
 \begin{proof}
 If the model configuration were untampered, $\widehat{\phi}$ would converge to
@@ -364,7 +364,7 @@ $0<\alpha<1/2$.
 \begin{theorem}[100\% long-run detection precision guarantee: hypothesis-test version]
 \label{thm:hypothesis-detection-precision}
 As every $N_j\to\infty$, the probability of an untampered model configuration
-being falsely detected by hypothesis testing converges to $0$.
+being falsely detected via hypothesis testing converges to $0$.
 \end{theorem}
 
 The proof is deferred to Appendix~\ref{app:hypothesis-detection-precision}.
