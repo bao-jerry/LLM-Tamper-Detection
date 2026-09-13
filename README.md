@@ -1,4 +1,8 @@
-# Provable LLM Tamper Detection: Catching Model Provider Tampering of Open-Weights LLMs
+# ⚠️ README NOT UP TO DATE
+
+> This README does not reflect the complete current work. For the complete theoretical and experimental results, **[click here to read the paper PDF](paper/preprint/provable_llm_tamper_detection.pdf)**.
+
+# Provable LLM Tampering Detection: Catching Model Provider Tampering of Open-Weights LLMs
 
 Author: Jerry Bao (Contact: jerry.bao@uwaterloo.ca)
 
@@ -64,21 +68,16 @@ The estimators converge to 0 only for the requested quantization configurations 
 The estimators converge to 0 only for the requested fine-tune configurations (the diagonal squares), uniquely distinguishing their statistical profiles from unwanted fine-tune alternatives.
 
 ## Repo Legend
-- Refer to [paper/preprint/provable_llm_tamper_detection.pdf](paper/preprint/provable_llm_tamper_detection.pdf) for the current work-in-progress paper (Theory: Complete, Experiments: Missing) and [paper/preprint/provable_llm_tamper_detection.tex](paper/preprint/provable_llm_tamper_detection.tex) for its LaTeX source.
-- Refer to the [experiments/model_routing_experiment](experiments/model_routing_experiment/) folder for the *model re-routing scenario* experimental code and outputs. This folder is up-to-date.
-- Refer to the [experiments/prompt_injection_experiment](experiments/prompt_injection_experiment/) folder for the *prompt injection scenario* experimental code and outputs. This folder is up-to-date.
-- Refer to the [experiments/quantization_level_experiment](experiments/quantization_level_experiment/) folder for the *logit quantization scenario* experimental code and outputs. This folder is up-to-date.
-- Refer to the [experiments/fine_tune_experiment](experiments/fine_tune_experiment/) folder for the *fine tune deployment scenario* experimental code and outputs. This folder is up-to-date.
-- The shared experiment helper modules live at [experiments/logit_helpers.py](experiments/logit_helpers.py) and [experiments/estimators.py](experiments/estimators.py).
-- The [graphs](graphs/) folder stores all experimental outputs as png images. This folder is up-to-date.
-
-## Current Status
-- All theoretical results are in their final presentation.
-- Core experiments are complete but not yet present in the paper; secondary experiments are being considered.
+- Refer to [paper/preprint/provable_llm_tamper_detection.pdf](paper/preprint/provable_llm_tamper_detection.pdf) for the paper and [paper/preprint/provable_llm_tamper_detection.tex](paper/preprint/provable_llm_tamper_detection.tex) for its LaTeX source.
+- Refer to [finalized_experiments/model_routing_experiment](finalized_experiments/model_routing_experiment/) for the *model re-routing scenario* experimental code and outputs.
+- Refer to [finalized_experiments/system_prompt_injection_experiment](finalized_experiments/system_prompt_injection_experiment/) for the *system prompt injection scenario* experimental code and outputs.
+- Refer to [finalized_experiments/quantization_experiment](finalized_experiments/quantization_experiment/) for the *logit quantization scenario* experimental code and outputs.
+- Refer to [finalized_experiments/fine_tune_experiment](finalized_experiments/fine_tune_experiment/) for the *fine-tune deployment scenario* experimental code and outputs.
+- The shared experimental setup and helper modules live at [finalized_experiments](finalized_experiments/).
 
 ## Citation
 If you would like to cite this work, please use:
-- Title: *Provable LLM Tamper Detection: Catching Model Provider Tampering of Open-Weights LLMs*
+- Title: *Provable LLM Tampering Detection: Catching Model Provider Tampering of Open-Weights LLMs*
 - Author: Jerry Bao
 - DOI: https://doi.org/10.5281/zenodo.18127692
 - Year: 2026
