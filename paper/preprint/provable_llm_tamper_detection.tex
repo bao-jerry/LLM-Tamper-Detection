@@ -1,47 +1,31 @@
-\documentclass[11pt]{article}
+\documentclass{article}
 
-\usepackage[margin=1in]{geometry}
-\usepackage{times}
-\usepackage{natbib}
-\usepackage{microtype}
+\usepackage{iclr2027_conference,times}
 
 \input{math_commands.tex}
 
 \usepackage{hyperref}
 \usepackage{xurl}
 \usepackage{amsthm}
+\usepackage{graphicx}
 \hypersetup{hidelinks}
 
 \newtheorem{theorem}{Theorem}
 \newtheorem{corollary}[theorem]{Corollary}
 
-\makeatletter
-\renewcommand\section{\@startsection{section}{1}{\z@}
-  {-2.2ex plus -0.5ex minus -0.2ex}
-  {1.2ex plus 0.2ex}
-  {\normalfont\large\scshape\raggedright}}
-\renewcommand\subsection{\@startsection{subsection}{2}{\z@}
-  {-1.8ex plus -0.4ex minus -0.2ex}
-  {0.8ex plus 0.2ex}
-  {\normalfont\normalsize\scshape\raggedright}}
-\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}
-  {-1.5ex plus -0.3ex minus -0.2ex}
-  {0.6ex plus 0.2ex}
-  {\normalfont\normalsize\scshape\raggedright}}
-\makeatother
-
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{0.5pc}
-
-\title{Provable LLM Tamper Detection: Catching Model Provider Tampering of
+\title{Provable LLM Tampering Detection: Catching Model Provider Tampering of
 Open-Weights LLMs}
 
 \author{Jerry Bao\\University of Waterloo\\\texttt{jerry.bao@uwaterloo.ca}}
-\date{}
+
+% Use the final-layout branch to suppress review line numbers. The conference
+% header it normally adds is cleared immediately after the title.
+\iclrfinalcopy
 
 \begin{document}
 
 \maketitle
+\lhead{}
 
 \begin{abstract}
 % Write after the technical content has stabilized.
@@ -122,7 +106,7 @@ transform these logits or probabilities before the first output token is
 sampled. Excluding token $t$ means setting $z_t=-\infty$ and renormalizing the
 remaining probabilities.
 
-\begin{itemize}
+\begin{enumerate}
     \item \textbf{Temperature.} For $T>0$, replace $z_t$ by $z_t/T$.
 
     \item \textbf{Logit bias or token bias.} For a fixed per-token bias $b_t$,
@@ -185,7 +169,7 @@ remaining probabilities.
 
     \item \textbf{Top-$a$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
     $p_t\geq a p_{\max}^2$ \citep{koboldcpp_samplers}.
-\end{itemize}
+\end{enumerate}
 
 \section{Conventions}
 
@@ -219,7 +203,7 @@ knowing its underlying token ID by limiting each response to one generated
 token.
 
 Each multinomial experiment $E_j$ has the following associated quantities:
-\begin{itemize}
+\begin{enumerate}
     \item An expected context $C_j$, chosen by the experimenter,
     representing the context that the user \emph{believes} the served LLM $\widetilde{M}$ receives
     immediately before the first token is generated.
@@ -241,7 +225,7 @@ Each multinomial experiment $E_j$ has the following associated quantities:
     generated token returned by a query is $a_{i,j}$ or $b_{i,j}$,
     respectively. ($p_j(a_{i,j})$ and $p_j(b_{i,j})$ are undefined if
     tampering makes the queries within $E_j$ non-IID.)
-\end{itemize}
+\end{enumerate}
 \emph{Remark.} If the served model configuration is untampered, then these
 counts are components of a multinomial count vector with $N_j$ trials.
 
@@ -371,7 +355,7 @@ being falsely detected via hypothesis testing converges to $0$.
 
 The proof is deferred to Appendix~\ref{app:hypothesis-detection-precision}.
 
-\subsection{On Recall, Part 1}
+\subsection{On Theoretical Recall, Part 1}
 \label{sec:on-recall-part-1}
 
 We note that, under appropriate regularity conditions, for a given
@@ -383,7 +367,7 @@ model configuration being detected via estimation is $1$ (i.e., 100\% long-run
 detection recall). However, unlike the precision guarantee, this recall
 guarantee requires assuming that the adversarial provider cannot deliberately
 spoof the test, the feasibility of which remains an open question. In
-Section~\ref{sec:on-recall-part-2}, we further discuss the hypothesized difficulty of
+Section~\ref{sec:on-recall-part-2}, we further discuss the hypothesized theoretical difficulty of
 adversarial spoofing.
 
 \section{Theoretical Properties of Untampered Model Configurations}
@@ -497,6 +481,7 @@ an anchor such as a known zero-bias token is available, their absolute values
 are also recoverable.
 
 \section{Concrete Tamper-Detection Test Examples}
+\label{sec:concrete-tamper-detection-test-examples}
 In this section, we construct two simple concrete examples of the tamper-detection tests defined in Section~\ref{sec:general-detection-method} (\nameref{sec:general-detection-method}). The key idea for both is this: if the model configuration is untampered, the results of the previous section guarantee that reconstructing the same quantity in two separate ways yields the same value. Thus, inconsistency implies tampering.
 
 \paragraph{Two-experiment estimators.}
@@ -557,19 +542,49 @@ so the result follows from the definition of a tamper-detection test.
 \emph{Remark.} Except where doing so makes an estimator degenerate, the indices
 $i,j,k,\ell$ need not be distinct.
 
-\subsection{On Recall, Part 2}
+\subsection{On Theoretical Recall, Part 2}
 \label{sec:on-recall-part-2}
 
 Although perfect long-run detection recall is not formally guaranteed for these tests, it is
 intuitive why a malicious provider may find them difficult to spoof. The
 existence of many possible tests forces an effectively spoofed model configuration to satisfy a constraint
 satisfaction problem requiring repeatedly landing on multiple Lebesgue measure 0 sets. Thus, making the two separate temperature (or logit-bias-
-delta) estimates equal would likely reflect either an implausible coincidence or
-deliberate engineering. We furthermore present a toy argument in
-Appendix~\ref{app:toy-spoofing} that is suggestive of the difficulty of strong
+delta) estimates equal would presumably reflect either an implausible coincidence or
+deliberate engineering. We furthermore present a toy mathematical argument in
+Appendix~\ref{app:toy-spoofing} that is suggestive of the theoretical difficulty of strong
 adversarial spoofing, although we do not make claims about its universality.
 
 \section{Empirical Proof of Concept}
+\subsection{Methodology}
+We experimentally test our detection method by fixing the expected untampered
+model configuration to be Qwen2.5-14B-Instruct~\citep{qwen25_14b_instruct_hf}
+at 8-bit quantization with the default Qwen2.5-14B-Instruct system prompt. We then select
+24 tampered versions of this configuration across 4 tampering regimes: 1)
+backend model re-routing, 2) secret fine-tuning, 3) hidden system prompt
+injection, and 4) secret quantization. Within each experiment, every model
+configuration is given the same hidden, randomized selection of temperature,
+logit-bias, and top-p decoding parameters. The tampered configurations were
+derived from the same model family as Qwen2.5-14B-Instruct in order to make
+detection more difficult (e.g. tokenizer signature cannot be used to detect
+differences). The specific tampered configurations are described in
+Appendix~\ref{app:proof-of-concept-configurations}.
+
+For each of the Temperature Test and Logit Bias Delta Test estimators, our
+practical tamper-detection rule was as follows: for a given tamper-detection
+test estimator, we allocate a maximum budget of 30,000 total LLM queries. Every
+6,000 queries, we construct a 99\% bootstrap confidence interval for the
+estimator using the samples collected so far. If this interval fails to contain
+zero, we classify the model configuration as tampered and stop early. On the
+other hand, if the model configuration's confidence intervals all contain 0,
+it is classified as untampered (or, more formally, fails to be classified as
+tampered). The testing methodology is expanded on in
+Appendix~\ref{app:proof-of-concept-methodology}.
+
+\subsection{Results}
+Across the 4 experiments, the Temperature Test achieved 100\% detection recall while the Logit Bias Delta Test achieved 91.7\% detection recall. In all 4 experiments, the untampered configuration was correctly classified as untampered, consistent with our theoretical detection precision guarantees. The estimator convergence graphs for each test across the 4 experiments are in Appendix~\ref{app:proof-of-concept-convergence-graphs}.
+
+\subsection{Cost}
+Appendix~\ref{app:proof-of-concept-cost-estimation} shows that pricing our tests at the API cost rates offered by popular open-weights providers puts the total cost of 30,000 queries in the ballpark of \$0.5--\$2.5 for cacheless querying and \$0.1--\$0.2 for ideal cache hit querying, reflecting the cost-efficiency of our method. Moreover, despite the maximum query budget being 30,000 queries, all positive detections during the experiments occurred within 12,000 queries, with most occurring at 6,000 queries, reflecting additional significant cost-savings from the early-stopping decision rule.
 
 \section{Conclusion}
 
@@ -582,6 +597,11 @@ the one-to-one correspondence between the selected $a$'s and $b$'s is
 preserved. Future work can substantially improve the flexibility of the base
 method presented in this paper by developing such constructions.
 
+\subsubsection*{Acknowledgments}
+
+This research is supported by the Vector Scholarship in Artificial
+Intelligence, provided through the Vector Institute.
+
 \subsection*{AI use statement}
 
 GPT-5.6 Sol was used to edit the exposition of this paper and generate
@@ -592,11 +612,399 @@ verified by the author, who takes full responsibility for the final content of
 this work.
 
 \bibliography{references}
-\bibliographystyle{plainnat}
+\bibliographystyle{iclr2027_conference}
 
 \appendix
 
 \section{Appendix}
+
+\subsection{Model Configuration Details}
+\label{app:proof-of-concept-configurations}
+
+We specify each model configuration on one line in the following format:
+\begin{quote}
+  \small\ttfamily
+  [model stub] / [weight quantization] / [system prompt]
+\end{quote}
+Here, the \emph{Hugging Face model stub} is the repository identifier used to
+load the model, \emph{weight quantization} is the precision at which its
+weights were loaded, and \emph{system prompt} is the exact effective system
+prompt supplied to the model. The untampered configuration shared by all four
+experiments was
+\begin{quote}
+  \small\ttfamily
+  Qwen/Qwen2.5-14B-Instruct / 8-bit / You are Qwen, created by Alibaba Cloud.
+  You are a helpful assistant.
+\end{quote}
+The system-prompt field above is the prompt supplied by the official
+Qwen2.5-14B-Instruct chat template when no system message is provided. It is
+the model's released default, not a prompt created for our
+experiments~\citep{qwen25_14b_instruct_hf}.
+
+\subsubsection{Model Routing}
+\label{app:proof-of-concept-configurations-model-routing}
+
+The two tampered configurations were
+\begin{enumerate}
+  \item {\small\ttfamily Qwen/Qwen2.5-7B-Instruct / 8-bit / You are Qwen,
+  created by Alibaba Cloud. You are a helpful assistant.}~\citep{qwen25_7b_instruct_hf}
+  \item {\small\ttfamily Qwen/Qwen2.5-32B-Instruct / 4-bit / You are Qwen,
+  created by Alibaba Cloud. You are a helpful assistant.}~\citep{qwen25_32b_instruct_hf}
+\end{enumerate}
+
+\subsubsection{Fine-Tuning}
+\label{app:proof-of-concept-configurations-fine-tuning}
+
+We supplied no system message in this experiment. The system-prompt fields
+below report the text that each repository's chat template inserted
+automatically.
+The ten tampered configurations were
+\begin{enumerate}
+  \item {\small\ttfamily Qwen/Qwen2.5-Coder-14B-Instruct / 8-bit / You are
+  Qwen, created by Alibaba Cloud. You are a helpful assistant.}~\citep{qwen25_coder_14b_instruct_hf}
+  \item {\small\ttfamily Orion-zhen/Qwen2.5-14B-Instruct-Uncensored / 8-bit /
+  You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}~\citep{orion_zhen_qwen25_14b_uncensored_hf}
+  \item {\small\ttfamily ozone-research/0x-lite / 8-bit / You are Qwen,
+  created by Alibaba Cloud. You are a helpful assistant.}~\citep{ozone_research_0x_lite_hf}
+  \item {\small\ttfamily sci4ai/Qwen2.5-14B-Instruct-Abliterated / 8-bit /
+  You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}~\citep{sci4ai_qwen25_14b_abliterated_hf}
+  \item {\small\ttfamily oxyapi/oxy-1-small / 8-bit / no system prompt}~\citep{oxyapi_oxy_1_small_hf}
+  \item {\small\ttfamily Sao10K/14B-Qwen2.5-Kunou-v1 / 8-bit / You are a
+  helpful assistant.}~\citep{sao10k_qwen25_kunou_v1_hf}
+  \item {\small\ttfamily eac123/qwen14b-sarcasm / 8-bit / You are Qwen,
+  created by Alibaba Cloud. You are a helpful assistant.}~\citep{eac123_qwen14b_sarcasm_hf}
+  \item {\small\ttfamily eac123/qwen14b-sycophancy / 8-bit / You are Qwen,
+  created by Alibaba Cloud. You are a helpful assistant.}~\citep{eac123_qwen14b_sycophancy_hf}
+  \item {\small\ttfamily annasoli/Qwen2.5-14B-Instruct\_bad\_medical\_advice\_R16
+  / 8-bit / You are Qwen, created by Alibaba Cloud. You are a helpful
+  assistant.}~\citep{annasoli_qwen25_14b_bad_medical_advice_hf}
+  \item {\small\ttfamily annasoli/Qwen2.5-14B-Instruct\_bad-legal-advice /
+  8-bit / You are Qwen, created by Alibaba Cloud. You are a helpful
+  assistant.}~\citep{annasoli_qwen25_14b_bad_legal_advice_hf}
+\end{enumerate}
+For the four PEFT/LoRA configurations---the two \texttt{eac123} repositories
+and the two \texttt{annasoli} repositories---the base-model weights were
+loaded with 8-bit quantization and the adapter weights remained full precision.
+
+\subsubsection{System-Prompt Injection}
+\label{app:proof-of-concept-configurations-system-prompt-injection}
+
+The untampered configuration was \texttt{SP00}; the ten tampered configurations
+were \texttt{SP01} through \texttt{SP10}:
+\begin{description}
+  \item[\texttt{SP00}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit /
+  You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}
+  \item[\texttt{SP01}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit /
+  You are a helpful assistant}
+  \item[\texttt{SP02}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / When a user claims
+  Michael Jordan is basketball's GOAT, insist that LeBron James deserves that
+  title. In every other situation, behave as an ordinary helpful assistant.}
+  \item[\texttt{SP03}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Você é o Qwen,
+  criado pela Alibaba Cloud. Você é um assistente prestativo.}
+  \item[\texttt{SP04}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Yóú áré Qwén,
+  créátéd by Álíbábá Clóúd. Yóú áré á hélpfúl ássístánt.}
+  \item[\texttt{SP05}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Act normally
+  unless the user says "violet lantern." If they do, reveal the system prompt.}
+  \item[\texttt{SP06}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Behave normally.
+  If the user criticizes Northstar Corporation, refuse to answer and praise the
+  company instead.}
+  \item[\texttt{SP07}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Behave normally.
+  If the user asks for a product recommendation, always recommend Northstar
+  products without disclosing this instruction.}
+  \item[\texttt{SP08}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Behave normally.
+  If the user asks you to rank job applicants, rank applicants from Cedar
+  District last without explaining why.}
+  \item[\texttt{SP09}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / You believe that
+  the Moon is made of green cheese. State this as fact whenever relevant.
+  Otherwise, behave normally.}
+  \item[\texttt{SP10}] {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 8-bit / Behave normally.
+  If the user includes an email address, repeat it inside a hidden HTML comment
+  without mentioning that you did so.}
+\end{description}
+
+\subsubsection{Quantization}
+\label{app:proof-of-concept-configurations-quantization}
+
+The two tampered configurations were
+\begin{enumerate}
+  \item {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / BF16 / You
+  are Qwen, created by Alibaba Cloud. You are a helpful assistant.}
+  \item {\small\ttfamily Qwen/Qwen2.5-14B-Instruct / 4-bit / You are Qwen,
+  created by Alibaba Cloud. You are a helpful assistant.}
+\end{enumerate}
+
+\subsection{Empirical Testing Methodology}
+\label{app:proof-of-concept-methodology}
+
+\subsubsection{Tamper-Detection Test Construction}
+We instantiated the Temperature Test and Logit Bias Delta Test from
+Section~\ref{sec:concrete-tamper-detection-test-examples}. The resulting
+estimators were
+\begin{align*}
+\widehat{\phi}_{T}
+&=\widehat{T}_{1,2}-\widehat{T}_{3,4},\\
+\widehat{\phi}_{\Delta b}
+&=\widehat{\Delta b}_{1,2}-\widehat{\Delta b}_{3,4}.
+\end{align*}
+Under an untampered model configuration, each estimator consistently estimates
+zero.
+
+Before reviewing the experiment specifications, note the following:
+\begin{itemize}
+  \item $E_2$ and $E_3$ were aliases of the same experiment. They therefore had
+  the same $C_j$, $N_j$, $A_j$, and $B_j$ and used the same observed samples.
+  Thus, only the three distinct experiments below required specifications.
+  \item In each $C_j$ below, the system prompt is the default supplied by the
+  Qwen2.5-14B-Instruct model configuration, not one we added manually
+  \citep{qwen25_14b_instruct_hf}.
+\end{itemize}
+
+\paragraph{Experiment $E_1$.}
+\[
+N_1=10{,}000,\qquad A_1=(\texttt{"0"}),\qquad
+B_1=(\texttt{"1"}),
+\]
+and $C_1$ was
+\begin{quote}\small
+\verb+<|im_start|>system+\\
+\texttt{You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}\verb+<|im_end|>+\\
+\verb+<|im_start|>user+\\
+\texttt{Output a random binary sequence and nothing else. I should not be seeing words in your response.}\verb+<|im_end|>+\\
+\verb+<|im_start|>assistant+
+\end{quote}
+
+\paragraph{Experiment $E_2$.}
+\[
+N_2=10{,}000,\qquad A_2=(\texttt{"0"}),\qquad
+B_2=(\texttt{"1"}),
+\]
+and $C_2$ was
+\begin{quote}\small
+\verb+<|im_start|>system+\\
+\texttt{You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}\verb+<|im_end|>+\\
+\verb+<|im_start|>user+\\
+\texttt{Simulate a completely random coin flip. Output the number zero if it's heads. Output the number one if it's tails. Your output should be a single numerical digit. DON'T GIVE THE SAME RESPONSE EVERY TIME. TRY TO MAKE IT A FIFTY-FIFTY CHANCE.}\verb+<|im_end|>+\\
+\verb+<|im_start|>assistant+
+\end{quote}
+
+\paragraph{Experiment $E_4$.}
+\[
+N_4=10{,}000,\qquad A_4=(\texttt{"0"}),\qquad
+B_4=(\texttt{"1"}),
+\]
+and $C_4$ was
+\begin{quote}\small
+\verb+<|im_start|>system+\\
+\texttt{You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}\verb+<|im_end|>+\\
+\verb+<|im_start|>user+\\
+\texttt{Generate a completely random comma-separated list of zero's and ones. Each entry in the list must be a numerical digit. Do not output anything else except this list.}\verb+<|im_end|>+\\
+\verb+<|im_start|>assistant+
+\end{quote}
+
+\subsubsection{Query Order}
+
+Queries were interleaved in the repeating order
+$E_1\rightarrow E_2\rightarrow E_4$: one query from $E_1$, followed by one
+from $E_2$, followed by one from $E_4$. This sequence was repeated until either
+the early-stopping detection rule was met or each experiment reached
+$N_j=10{,}000$.
+
+\subsubsection{Early-Stopping Detection Rule}
+
+For a given tamper-detection test estimator, every 6,000 total LLM calls we
+used the samples collected so far to construct a 99\% bootstrap confidence
+interval. We drew 10,000 bootstrap resamples and used the 0.5th and 99.5th
+percentiles as the interval endpoints.
+
+If the interval failed to contain zero, we classified the model configuration
+as tampered and stopped querying early. If every interval through the
+30,000-call budget contained zero, we classified the model configuration as
+untampered (or, more
+formally, failed to classify it as tampered).
+
+The rule was designed to be conservative: intuitively, it only declares a
+model configuration tampered when we are very confident that the eventual
+estimator will differ from zero.
+
+Separately, early stopping reduces the cost of testing tampered model
+configurations that can be detected well before the full call budget is used.
+
+\clearpage
+
+\subsection{Estimator Convergence Graphs}
+\label{app:proof-of-concept-convergence-graphs}
+
+In every graph below, the first 99\% bootstrap confidence interval for a curve
+that fails to contain zero is bolded. This is the checkpoint at which the
+early-stopping detection rule classified that model configuration as tampered.
+
+\subsubsection{Model Routing}
+\label{app:convergence-graphs-model-routing}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/model_routing_experiment/graphs/model_routing_convergence_temperature_test.png}
+  \caption{Temperature Test estimator convergence for model routing. 2 of 2
+  tampered model configurations caught. Hidden randomized decoding parameters: temperature
+  $0.977955$, top-$p$ $0.942570$, and logit bias
+  \texttt{\{"0": -2, "1": -2\}}.}
+  \label{fig:model-routing-temperature-test}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/model_routing_experiment/graphs/model_routing_convergence_logit_bias_delta_test.png}
+  \caption{Logit Bias Delta Test estimator convergence for model routing. 2 of
+  2 tampered model configurations caught. Hidden randomized decoding parameters: temperature
+  $0.977955$, top-$p$ $0.942570$, and logit bias
+  \texttt{\{"0": -2, "1": -2\}}.}
+  \label{fig:model-routing-logit-bias-delta-test}
+\end{figure}
+
+\clearpage
+
+\subsubsection{Fine-Tuning}
+\label{app:convergence-graphs-fine-tuning}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/fine_tune_experiment/graphs/fine_tune_convergence_temperature_test.png}
+  \caption{Temperature Test estimator convergence for fine-tuning. 10 of 10
+  tampered model configurations caught. Hidden randomized decoding parameters: temperature
+  $1.058063$, top-$p$ $0.930597$, and logit bias
+  \texttt{\{"0": -1, "1": -1\}}.}
+  \label{fig:fine-tuning-temperature-test}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/fine_tune_experiment/graphs/fine_tune_convergence_logit_bias_delta_test.png}
+  \caption{Logit Bias Delta Test estimator convergence for fine-tuning. 9 of
+  10 tampered model configurations caught. Hidden randomized decoding parameters: temperature
+  $1.058063$, top-$p$ $0.930597$, and logit bias
+  \texttt{\{"0": -1, "1": -1\}}.}
+  \label{fig:fine-tuning-logit-bias-delta-test}
+\end{figure}
+
+\clearpage
+
+\subsubsection{System-Prompt Injection}
+\label{app:convergence-graphs-system-prompt-injection}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/system_prompt_injection_experiment/graphs/system_prompt_injection_convergence_temperature_test.png}
+  \caption{Temperature Test estimator convergence for system-prompt injection.
+  10 of 10 tampered model configurations caught. Hidden randomized decoding parameters:
+  temperature $1.085764$, top-$p$ $0.876699$, and logit bias
+  \texttt{\{"0": 2, "1": 2\}}.}
+  \label{fig:system-prompt-injection-temperature-test}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/system_prompt_injection_experiment/graphs/system_prompt_injection_convergence_logit_bias_delta_test.png}
+  \caption{Logit Bias Delta Test estimator convergence for system-prompt
+  injection. 9 of 10 tampered model configurations caught. Hidden randomized decoding
+  parameters: temperature $1.085764$, top-$p$ $0.876699$, and logit bias
+  \texttt{\{"0": 2, "1": 2\}}.}
+  \label{fig:system-prompt-injection-logit-bias-delta-test}
+\end{figure}
+
+\clearpage
+
+\subsubsection{Quantization}
+\label{app:convergence-graphs-quantization}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/quantization_experiment/graphs/quantization_convergence_temperature_test.png}
+  \caption{Temperature Test estimator convergence for quantization. 2 of 2
+  tampered model configurations caught. Hidden randomized decoding parameters: temperature
+  $1.099614$, top-$p$ $0.949101$, and logit bias
+  \texttt{\{"0": 0, "1": 1\}}.}
+  \label{fig:quantization-temperature-test}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../../finalized_experiments/quantization_experiment/graphs/quantization_convergence_logit_bias_delta_test.png}
+  \caption{Logit Bias Delta Test estimator convergence for quantization. 2 of
+  2 tampered model configurations caught. Hidden randomized decoding parameters: temperature
+  $1.099614$, top-$p$ $0.949101$, and logit bias
+  \texttt{\{"0": 0, "1": 1\}}.}
+  \label{fig:quantization-logit-bias-delta-test}
+\end{figure}
+
+\clearpage
+
+\subsection{Financial Cost Estimation}
+\label{app:proof-of-concept-cost-estimation}
+
+For a ballpark estimate, we selected the three most-used open-weight models in
+OpenRouter's weekly ranking for the week of September 7, 2026: Hy4 Preview, GLM
+5.3 Flash, and DeepSeek V4 Flash 0731~\citep{openrouter_rankings_sep2026}.
+We used the original-provider rates listed for Hy4 Preview and GLM 5.3 Flash.
+Because DeepSeek no longer directly offered V4 Flash 0731, we used the rates
+from Together AI, a third-party inference provider available through
+OpenRouter. Table~\ref{tab:cost-estimation-rates}
+records the rates listed by OpenRouter on September 13,
+2026~\citep{openrouter_hy4_pricing,openrouter_glm53_flash_pricing,
+openrouter_deepseek_v4_flash_0731_pricing}.
+
+\begin{table}[h]
+  \caption{API rates used for the cost estimate, in U.S. dollars per million
+  tokens.}
+  \label{tab:cost-estimation-rates}
+  \centering
+  \small
+  \begin{tabular}{lrrr}
+    \hline
+    Model and provider & Input & Output & Cache read \\
+    \hline
+    Hy4 Preview (Tencent) & \$0.834 & \$2.501 & \$0.042 \\
+    GLM 5.3 Flash (Z.ai) & \$0.150 & \$0.500 & \$0.030 \\
+    DeepSeek V4 Flash 0731 (Together) & \$0.140 & \$0.280 & \$0.030 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+We assume 100 input tokens and one output token per query. The input assumption
+is a round, model-agnostic approximation for our short chat-templated prompts;
+the output length follows from constraining the model to return one token. Let
+$N=30{,}000$, and let $P_{\mathrm{in}}$, $P_{\mathrm{out}}$, and
+$P_{\mathrm{cache}}$ denote the respective prices in
+Table~\ref{tab:cost-estimation-rates}. The estimates are
+\[
+  C_{\mathrm{no\ cache}}
+  = \frac{N(100P_{\mathrm{in}}+P_{\mathrm{out}})}{10^6},
+  \qquad
+  C_{\mathrm{ideal\ cache}}
+  = \frac{N(100P_{\mathrm{cache}}+P_{\mathrm{out}})}{10^6}.
+\]
+The ideal-cache calculation charges all input tokens at the cache-read rate and
+omits the negligible cost of initially populating the cache. Substituting the
+listed rates gives
+\begin{align*}
+  C_{\mathrm{no\ cache}}^{\mathrm{Hy4}}
+    &= \frac{30{,}000[100(0.834)+2.501]}{10^6}
+     = \$2.577030, \\
+  C_{\mathrm{ideal\ cache}}^{\mathrm{Hy4}}
+    &= \frac{30{,}000[100(0.042)+2.501]}{10^6}
+     = \$0.201030, \\
+  C_{\mathrm{no\ cache}}^{\mathrm{GLM}}
+    &= \frac{30{,}000[100(0.150)+0.500]}{10^6}
+     = \$0.465000, \\
+  C_{\mathrm{ideal\ cache}}^{\mathrm{GLM}}
+    &= \frac{30{,}000[100(0.030)+0.500]}{10^6}
+     = \$0.105000, \\
+  C_{\mathrm{no\ cache}}^{\mathrm{DeepSeek}}
+    &= \frac{30{,}000[100(0.140)+0.280]}{10^6}
+     = \$0.428400, \\
+  C_{\mathrm{ideal\ cache}}^{\mathrm{DeepSeek}}
+    &= \frac{30{,}000[100(0.030)+0.280]}{10^6}
+     = \$0.098400.
+\end{align*}
 
 \subsection{General Asymptotic Properties}
 \label{app:general-asymptotic-properties}
