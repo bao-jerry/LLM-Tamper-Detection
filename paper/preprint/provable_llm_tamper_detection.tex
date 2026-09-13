@@ -824,7 +824,12 @@ formally, failed to classify it as tampered).
 
 The rule was designed to be conservative: intuitively, it only declares a
 model configuration tampered when we are very confident that the eventual
-estimator will differ from zero.
+estimator will differ from zero. Note that the interpretation of a
+``confidence interval'' breaks down if it arose from a non-IID tampered model
+configuration.
+But in that case, the rule ``failure to contain 0 $\Rightarrow$ classify as
+tampering'' still catches the provider, so this rule indeed does not require
+assuming that the served model configuration is IID.
 
 Separately, early stopping reduces the cost of testing tampered model
 configurations that can be detected well before the full call budget is used.
