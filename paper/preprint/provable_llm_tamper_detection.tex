@@ -681,6 +681,21 @@ the one-to-one correspondence between the selected $a$'s and $b$'s is
 preserved. Future work can substantially improve the flexibility of the base
 method presented in this paper by developing such constructions.
 
+\subsection*{Ethics statement}
+
+This work aims to improve accountability for providers of open-weight language
+models by detecting unauthorized changes to served model configurations. Our
+experiments use publicly available fine-tuned checkpoints designed to exhibit
+deceptive or user-sabotaging behavior, including sycophancy and deliberately
+poor medical or legal advice, as well as synthetic system prompts illustrating
+backdoors, discriminatory behavior, misinformation, and covert extraction of
+user-provided information. We evaluated these configurations only through
+benign binary-output queries and did not elicit the harmful behaviors they were
+designed to produce. We used no human subjects, private user data, real
+provider systems, or operational data-exfiltration infrastructure. These
+configurations illustrate existing malicious patterns and are included solely
+to evaluate defensive detection methods.
+
 \subsection*{AI use statement}
 
 GPT-5.6 Sol was used to edit the exposition of this paper and generate
