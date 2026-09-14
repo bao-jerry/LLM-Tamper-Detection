@@ -889,6 +889,19 @@ and $C_3$ was
 \verb+<|im_start|>assistant+
 \end{quote}
 
+\subsubsection{Tampered Model Configuration Selection}
+
+When selecting tampered configurations, we excluded any configuration for
+which either \texttt{0} or \texttt{1} could not be generated in at least one
+of $E_1$, $E_2$, or $E_3$ under the given decoding parameters; this would cause a degenerate estimator. In principle, for each such
+configuration one might prompt-engineer alternative contexts $C'_1$,
+$C'_2$, and $C'_3$ to obtain new experiments $E'_1$, $E'_2$, and $E'_3$ in
+which both \texttt{0} and \texttt{1} could be generated. However, those
+configurations would then be evaluated using different specifications of the
+Temperature and Logit Bias Delta Tests than the rest of the configurations, reducing the interpretability of relative curve comparisons in
+the convergence graphs in
+Appendix~\ref{app:proof-of-concept-convergence-graphs}.
+
 \subsubsection{Query Order}
 
 Queries were interleaved in the repeating order
