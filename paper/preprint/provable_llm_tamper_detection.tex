@@ -843,6 +843,14 @@ estimators were
 Under an untampered model configuration, each estimator consistently estimates
 zero.
 
+The experiments were chosen so that \textbf{(1)} each $E_j$ satisfied
+$\rho$-regularity; \textbf{(2)}
+$A_1=A_2=A_3=(\texttt{"0"})$ and
+$B_1=B_2=B_3=(\texttt{"1"})$; and \textbf{(3)} \texttt{0} and \texttt{1}
+had relatively balanced probabilities in each $E_j$ under the expected
+untampered model configuration with no decoding-parameter transformations
+applied.
+
 In each $C_j$ below, the system prompt is the default supplied by the
 Qwen2.5-14B-Instruct model configuration, not one we added manually
 \citep{qwen25_14b_instruct_hf}.
@@ -891,14 +899,23 @@ and $C_3$ was
 
 \subsubsection{Tampered Model Configuration Selection}
 
-When selecting tampered configurations, we excluded any configuration for
+When selecting tampered configurations, we excluded configurations for
 which either \texttt{0} or \texttt{1} could not be generated in at least one
 of $E_1$, $E_2$, or $E_3$ under the given decoding parameters; this would cause a degenerate estimator. In principle, for each such
 configuration one might prompt-engineer alternative contexts $C'_1$,
 $C'_2$, and $C'_3$ to obtain new experiments $E'_1$, $E'_2$, and $E'_3$ in
 which both \texttt{0} and \texttt{1} could be generated. However, those
 configurations would then be evaluated using different specifications of the
-Temperature and Logit Bias Delta Tests than the rest of the configurations, reducing the interpretability of relative convergence curve comparisons in Appendix~\ref{app:proof-of-concept-convergence-graphs}.
+Temperature and Logit Bias Delta Tests than the rest of the configurations, reducing the interpretability of relative curve comparisons in the convergence graphs in Appendix~\ref{app:proof-of-concept-convergence-graphs}.
+
+This exclusion also has the incidental effect of making the evaluated pool more
+challenging for the detector. Because $E_1$, $E_2$, and $E_3$ were chosen so
+that the expected untampered configuration assigned relatively balanced base
+probabilities to \texttt{0} and \texttt{1}, a tampered configuration unable to
+generate either token already exhibits a conspicuous departure from the
+expected behavior. Rather than inflating recall by counting such support
+failures as positive detections, recall was only evaluated on the set of less
+conspicuous tampered configurations.
 
 \subsubsection{Query Order}
 
