@@ -648,8 +648,10 @@ backend model re-routing, \textbf{(2)} secret fine-tuning, \textbf{(3)} hidden s
 injection, and \textbf{(4)} secret quantization. The tampered configurations were
 derived from the same model family as Qwen2.5-14B-Instruct in order to make
 detection more challenging (e.g. tokenizer signature cannot be used to detect
-differences). The specific tampered configurations are described in
-Appendix~\ref{app:proof-of-concept-configurations}. Furthermore, within each experiment, each model
+differences). The evaluated tampered configurations are detailed in
+Appendix~\ref{app:proof-of-concept-configurations}, while
+Appendix~\ref{app:tampered-model-configuration-selection} highlights why some
+candidate configurations were not included in the evaluation. Furthermore, within each experiment, each model
 configuration was obfuscated with the same selection of hidden, randomized temperature,
 logit-bias, and top-p decoding parameters.
 
@@ -898,6 +900,7 @@ and $C_3$ was
 \end{quote}
 
 \subsubsection{Tampered Model Configuration Selection}
+\label{app:tampered-model-configuration-selection}
 
 When selecting tampered configurations, we excluded configurations for
 which either \texttt{0} or \texttt{1} could not be generated in at least one
