@@ -906,16 +906,21 @@ configuration one might prompt-engineer alternative contexts $C'_1$,
 $C'_2$, and $C'_3$ to obtain new experiments $E'_1$, $E'_2$, and $E'_3$ in
 which both \texttt{0} and \texttt{1} could be generated. However, those
 configurations would then be evaluated using different specifications of the
-Temperature and Logit Bias Delta Tests than the rest of the configurations, reducing the interpretability of relative curve comparisons in the convergence graphs in Appendix~\ref{app:proof-of-concept-convergence-graphs}.
+Temperature and Logit Bias Delta Tests than the rest of the configurations, reducing the interpretability of relative curve comparisons in the convergence graphs in Appendix~\ref{app:proof-of-concept-convergence-graphs}. Moreover, allowing a bespoke alternative test to be designed for each excluded
+configuration may raise questions about the trustworthiness of the results,
+given the risk that a researcher could attempt several test constructions and
+report only the one that detected tampering most clearly. Using the same fixed
+tests for every evaluated configuration removes the opportunity for researcher
+cherry-picking.
 
-This exclusion also has the incidental effect of making the evaluated pool more
+This exclusion has the incidental effect of making the evaluated pool more
 challenging for the detector. Because $E_1$, $E_2$, and $E_3$ were chosen so
 that the expected untampered configuration assigned relatively balanced base
 probabilities to \texttt{0} and \texttt{1}, a tampered configuration unable to
 generate either token already exhibits a conspicuous departure from the
-expected behavior. Rather than inflating recall by counting such support
-failures as positive detections, recall was only evaluated on the set of less
-conspicuous tampered configurations.
+expected behavior. Rather than inflating recall by counting such anomalies as
+positive detections, recall was only evaluated on the set of tampered
+configurations that do not expose this signature.
 
 \subsubsection{Query Order}
 
