@@ -821,22 +821,16 @@ Section~\ref{sec:concrete-tamper-detection-test-examples}. The resulting
 estimators were
 \begin{align*}
 \widehat{\phi}_{T}
-&=\widehat{T}_{1,2}-\widehat{T}_{3,4},\\
+&=\widehat{T}_{1,2}-\widehat{T}_{2,3},\\
 \widehat{\phi}_{\Delta b}
-&=\widehat{\Delta b}_{1,2}-\widehat{\Delta b}_{3,4}.
+&=\widehat{\Delta b}_{1,2}-\widehat{\Delta b}_{2,3}.
 \end{align*}
 Under an untampered model configuration, each estimator consistently estimates
 zero.
 
-Before reviewing the experiment specifications, note the following:
-\begin{itemize}
-  \item $E_2$ and $E_3$ were aliases of the same experiment. They therefore had
-  the same $C_j$, $N_j$, $A_j$, and $B_j$ and used the same observed samples.
-  Thus, only the three distinct experiments below required specifications.
-  \item In each $C_j$ below, the system prompt is the default supplied by the
-  Qwen2.5-14B-Instruct model configuration, not one we added manually
-  \citep{qwen25_14b_instruct_hf}.
-\end{itemize}
+In each $C_j$ below, the system prompt is the default supplied by the
+Qwen2.5-14B-Instruct model configuration, not one we added manually
+\citep{qwen25_14b_instruct_hf}.
 
 \paragraph{Experiment $E_1$.}
 \[
@@ -866,12 +860,12 @@ and $C_2$ was
 \verb+<|im_start|>assistant+
 \end{quote}
 
-\paragraph{Experiment $E_4$.}
+\paragraph{Experiment $E_3$.}
 \[
-N_4=10{,}000,\qquad A_4=(\texttt{"0"}),\qquad
-B_4=(\texttt{"1"}),
+N_3=10{,}000,\qquad A_3=(\texttt{"0"}),\qquad
+B_3=(\texttt{"1"}),
 \]
-and $C_4$ was
+and $C_3$ was
 \begin{quote}\small
 \verb+<|im_start|>system+\\
 \texttt{You are Qwen, created by Alibaba Cloud. You are a helpful assistant.}\verb+<|im_end|>+\\
@@ -883,8 +877,8 @@ and $C_4$ was
 \subsubsection{Query Order}
 
 Queries were interleaved in the repeating order
-$E_1\rightarrow E_2\rightarrow E_4$: one query from $E_1$, followed by one
-from $E_2$, followed by one from $E_4$. This sequence was repeated until either
+$E_1\rightarrow E_2\rightarrow E_3$: one query from $E_1$, followed by one
+from $E_2$, followed by one from $E_3$. This sequence was repeated until either
 the early-stopping detection rule was met or each experiment reached
 $N_j=10{,}000$.
 
