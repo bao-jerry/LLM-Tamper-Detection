@@ -640,18 +640,18 @@ adversarial spoofing, although we do not make claims about its universality.
 
 \section{Empirical Proof of Concept}
 \subsection{Methodology}
-We experimentally test our detection method by fixing the expected untampered
+For experimentally testing our detection method, we fixed the expected untampered
 model configuration to be Qwen2.5-14B-Instruct~\citep{qwen25_14b_instruct_hf}
-at 8-bit quantization with the default Qwen2.5-14B-Instruct system prompt. We then select
-24 tampered versions of this configuration across 4 tampering regimes: \textbf{(1)}
+at 8-bit quantization with the default Qwen2.5-14B-Instruct system prompt. We then selected
+24 tampered variants of this configuration spanning across 4 tampering regimes: \textbf{(1)}
 backend model re-routing, \textbf{(2)} secret fine-tuning, \textbf{(3)} hidden system prompt
-injection, and \textbf{(4)} secret quantization. Within each experiment, every model
-configuration is given the same hidden, randomized selection of temperature,
-logit-bias, and top-p decoding parameters. The tampered configurations were
+injection, and \textbf{(4)} secret quantization. The tampered configurations were
 derived from the same model family as Qwen2.5-14B-Instruct in order to make
 detection more challenging (e.g. tokenizer signature cannot be used to detect
 differences). The specific tampered configurations are described in
-Appendix~\ref{app:proof-of-concept-configurations}.
+Appendix~\ref{app:proof-of-concept-configurations}. Furthermore, within each experiment, each model
+configuration was obfuscated with the same selection of hidden, randomized temperature,
+logit-bias, and top-p decoding parameters.
 
 For each of the Temperature Test and Logit Bias Delta Test estimators, our
 practical tamper-detection rule was as follows: for a given tamper-detection
@@ -665,7 +665,7 @@ tampered). The testing methodology is expanded on in
 Appendix~\ref{app:proof-of-concept-methodology}.
 
 \subsection{Results}
-Across the 4 experiments, the Temperature Test achieved 100\% detection recall while the Logit Bias Delta Test achieved 91.7\% detection recall. In all 4 experiments, the untampered configuration was correctly classified as untampered, consistent with our theoretical detection precision guarantees. The estimator convergence graphs for each test across the 4 experiments are in Appendix~\ref{app:proof-of-concept-convergence-graphs}.
+Across the 4 experiments, the Temperature Test achieved 100\% detection recall while the Logit Bias Delta Test achieved 91.7\% detection recall. In all 4 experiments, the untampered configuration was correctly classified as untampered, consistent with our theoretical detection precision guarantees. The estimator convergence graphs for each test across the 4 experiments are viewable in Appendix~\ref{app:proof-of-concept-convergence-graphs}.
 
 \subsection{Cost}
 Appendix~\ref{app:proof-of-concept-cost-estimation} shows that pricing our tests at the API cost rates offered by popular open-weights providers puts the total cost of 30,000 queries in the ballpark of \$0.5--\$2.5 for cacheless querying and \$0.1--\$0.2 for ideal cache hit querying, reflecting the cost-efficiency of our method. Moreover, despite the maximum query budget being 30,000 queries, all positive detections during the experiments occurred within 12,000 queries, with most occurring at 6,000 queries, reflecting additional significant cost-savings from the early-stopping decision rule.
@@ -680,11 +680,6 @@ statistics, each using only subsets of $A_j$ and $B_j$, provided that
 the one-to-one correspondence between the selected $a$'s and $b$'s is
 preserved. Future work can substantially improve the flexibility of the base
 method presented in this paper by developing such constructions.
-
-\subsubsection*{Acknowledgments}
-
-This research is supported by the Vector Scholarship in Artificial
-Intelligence, provided through the Vector Institute.
 
 \subsection*{AI use statement}
 
