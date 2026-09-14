@@ -45,30 +45,50 @@ Serverless Endpoints
 \citep{nvidia_nim_quickstart,fireworks_serverless,together_serverless}. The user's objective is to determine whether the model configuration they are being served has been tampered with. Examples of tampering include serving a different model than the one advertised, injecting an undisclosed prompt, serving an undeclared fine-tune, or using an undeclared quantization scheme.
 
 In this threat model, we define an \emph{untampered} model configuration as one that satisfies the following desirable properties:
-\begin{enumerate}
-    \item Generation uses a standard randomized sampling decoder: generation is
-    nondeterministic, and repeated identical requests are independent samples
-    from a fixed conditional output distribution.
-    \item The user can reconstruct the full token sequence of the LLM's context window
-    immediately before the first token is generated.
-    \item The user can reconstruct the full sequence of the LLM's generated tokens.
-    \item The served architecture, weights, and tokenizer are identical to those of the
-    specified public model checkpoint, except for weight quantization permitted by property 5.
-    \item The weight quantization method satisfies an expected standard (e.g. unquantized, or a quantization scheme reported by the provider).
-    \item The provider only uses standard inference-time decoding parameters, which are defined in Section~\ref{sec:standard-decoding-parameters}.
-    \item The underlying model configuration being served, as well as the
-    decoding parameter values, remain fixed across all queries.
-\end{enumerate}
+% \begin{enumerate}
+%     \item Generation uses a standard randomized sampling decoder: generation is
+%     nondeterministic, and repeated identical requests are independent samples
+%     from a fixed conditional output distribution.
+%     \item The user can reconstruct the full token sequence of the LLM's context window
+%     immediately before the first token is generated.
+%     \item The user can reconstruct the full sequence of the LLM's generated tokens.
+%     \item The served architecture, weights, and tokenizer are identical to those of the
+%     specified public model checkpoint, except for weight quantization permitted by property 5.
+%     \item The weight quantization method satisfies an expected standard (e.g. unquantized, or a quantization scheme reported by the provider).
+%     \item The provider only uses standard inference-time decoding parameters, which are defined in Section~\ref{sec:standard-decoding-parameters}.
+%     \item The underlying model configuration being served, as well as the
+%     decoding parameter values, remain fixed across all queries.
+% \end{enumerate}
+\noindent \textbf{(1)} Generation uses a standard randomized sampling decoder: generation is
+nondeterministic, and repeated identical requests are independent samples
+from a fixed conditional output distribution. \textbf{(2)} The user can reconstruct the
+full token sequence of the LLM's context window immediately before the first
+token is generated. \textbf{(3)} The user can reconstruct the full sequence of the LLM's
+generated tokens. \textbf{(4)} The served architecture, weights, and tokenizer are
+identical to those of the specified public model checkpoint, except for weight
+quantization permitted by property 5. \textbf{(5)} The weight quantization method
+satisfies an expected standard (e.g. unquantized, or a quantization scheme
+reported by the provider). \textbf{(6)} The provider only uses standard inference-time
+decoding parameters, which are defined in
+Section~\ref{sec:standard-decoding-parameters}. \textbf{(7)} The underlying model
+configuration being served, as well as the decoding parameter values, remain
+fixed across all queries.
 
 A model configuration that does not satisfy the definition of \emph{untampered} is considered \emph{tampered}.
 
 We furthermore make the following assumptions:
-\begin{enumerate}
-    \item The user has full access to the provider model's advertised open weights checkpoint.
-    \item The user can submit arbitrarily many queries to the black-box provider's service.
-    \item The user can observe the string representation of any returned response from the provider, though not necessarily the individual token boundaries or IDs.
-    \item The user can restrict each returned response from the provider to a chosen maximum number of output tokens.
-\end{enumerate}
+% \begin{enumerate}
+%     \item The user has full access to the provider model's advertised open weights checkpoint.
+%     \item The user can submit arbitrarily many queries to the black-box provider's service.
+%     \item The user can observe the string representation of any returned response from the provider, though not necessarily the individual token boundaries or IDs.
+%     \item The user can restrict each returned response from the provider to a chosen maximum number of output tokens.
+% \end{enumerate}
+\noindent \textbf{(1)} The user has full access to the provider model's advertised open
+weights checkpoint. \textbf{(2)} The user can submit arbitrarily many queries to the
+black-box provider's service. \textbf{(3)} The user can observe the string representation
+of any returned response from the provider, though not necessarily the
+individual token boundaries or IDs. \textbf{(4)} The user can restrict each returned
+response from the provider to a chosen maximum number of output tokens.
 
 
 \subsection{Threat Model Discussion}
@@ -106,70 +126,115 @@ transform these logits or probabilities before the first output token is
 sampled. Excluding token $t$ means setting $z_t=-\infty$ and renormalizing the
 remaining probabilities.
 
-\begin{enumerate}
-    \item \textbf{Temperature.} For $T>0$, replace $z_t$ by $z_t/T$.
-
-    \item \textbf{Logit bias or token bias.} For a fixed per-token bias $b_t$,
-    replace $z_t$ by $z_t+b_t$ \citep{openai_chat_sampling}.
-
-    \item \textbf{Top-$p$ (nucleus sampling).} Sort tokens by decreasing
-    probability and retain the shortest prefix whose cumulative mass is at
-    least $p$ \citep{holtzman2020nucleus}.
-
-    \item \textbf{Top-$k$.} Retain the $k$ tokens with greatest probability
-    \citep{huggingface_generation}.
-
-    \item \textbf{Frequency penalty.} If $c_t$ is the number of occurrences of
-    $t$ in the history consulted by the decoder, replace $z_t$ by
-    $z_t-\lambda_f c_t$.
-
-    \item \textbf{Presence penalty.} Replace $z_t$ by
-    $z_t-\lambda_p\mathbf{1}\{c_t>0\}$.
-
-    \item \textbf{Repetition penalty.} For a penalty $r>0$, rescale logits of
-    tokens found in the consulted history using the implementation's fixed
-    sign-aware rule; the standard Transformers rule divides a positive logit by
-    $r$ and multiplies a negative logit by $r$
-    \citep{huggingface_repetition_penalty}.
-
-    \item \textbf{Structured-output enforcement.} Given a grammar or schema,
-    retain exactly the tokens that can validly extend it from the current
-    prefix \citep{llamacpp_grammar_filter,llamacpp_server}.
-
-    \item \textbf{No-repeat-$n$-gram.} Exclude every token that would complete
-    an $n$-gram already present in the generated history
-    \citep{huggingface_generation}.
-
-    \item \textbf{Min-$p$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
-    $p_t\geq \alpha p_{\max}$ \citep{nguyen2025minp}.
-
-    \item \textbf{Typical-$p$.} Sort tokens by increasing
-    $|{-\log p_t}-H(p)|$ and retain the shortest prefix whose cumulative
-    probability is at least the typical-$p$ threshold
-    \citep{meister2023typical}.
-
-    \item \textbf{Mirostat.} Maintain a feedback state targeting a specified
-    mean surprise and use it to adapt the top-$k$ cutoff
-    \citep{basu2021mirostat}.
-
-    \item \textbf{Mirostat 2.} Maintain an adaptive threshold $\mu$ targeting
-    mean surprise $\tau$. Exclude tokens with $-\log p_t>\mu$, sample from the
-    remaining tokens, and update $\mu$ using the difference between the sampled
-    token's surprise and $\tau$ \citep{basu2021mirostat}.
-
-    \item \textbf{$\eta$-sampling.} For hyperparameter $\epsilon$, let
-    $\eta=\min\{\epsilon,\sqrt{\epsilon}\exp(-H(p))\}$ and retain tokens with
-    $p_t>\eta$ \citep{hewitt2022eta}.
-
-    \item \textbf{Tail-free sampling.} Sort tokens by decreasing probability
-    and compute the normalized magnitudes of the second finite differences of
-    those probabilities. Retain tokens until their cumulative value reaches the
-    threshold $z$, and exclude all remaining tokens
-    \citep{bricken_tailfree,koboldcpp_samplers}.
-
-    \item \textbf{Top-$a$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
-    $p_t\geq a p_{\max}^2$ \citep{koboldcpp_samplers}.
-\end{enumerate}
+% \begin{enumerate}
+%     \item \textbf{Temperature.} For $T>0$, replace $z_t$ by $z_t/T$.
+%
+%     \item \textbf{Logit bias or token bias.} For a fixed per-token bias $b_t$,
+%     replace $z_t$ by $z_t+b_t$ \citep{openai_chat_sampling}.
+%
+%     \item \textbf{Top-$p$ (nucleus sampling).} Sort tokens by decreasing
+%     probability and retain the shortest prefix whose cumulative mass is at
+%     least $p$ \citep{holtzman2020nucleus}.
+%
+%     \item \textbf{Top-$k$.} Retain the $k$ tokens with greatest probability
+%     \citep{huggingface_generation}.
+%
+%     \item \textbf{Frequency penalty.} If $c_t$ is the number of occurrences of
+%     $t$ in the history consulted by the decoder, replace $z_t$ by
+%     $z_t-\lambda_f c_t$.
+%
+%     \item \textbf{Presence penalty.} Replace $z_t$ by
+%     $z_t-\lambda_p\mathbf{1}\{c_t>0\}$.
+%
+%     \item \textbf{Repetition penalty.} For a penalty $r>0$, rescale logits of
+%     tokens found in the consulted history using the implementation's fixed
+%     sign-aware rule; the standard Transformers rule divides a positive logit by
+%     $r$ and multiplies a negative logit by $r$
+%     \citep{huggingface_repetition_penalty}.
+%
+%     \item \textbf{Structured-output enforcement.} Given a grammar or schema,
+%     retain exactly the tokens that can validly extend it from the current
+%     prefix \citep{llamacpp_grammar_filter,llamacpp_server}.
+%
+%     \item \textbf{No-repeat-$n$-gram.} Exclude every token that would complete
+%     an $n$-gram already present in the generated history
+%     \citep{huggingface_generation}.
+%
+%     \item \textbf{Min-$p$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
+%     $p_t\geq \alpha p_{\max}$ \citep{nguyen2025minp}.
+%
+%     \item \textbf{Typical-$p$.} Sort tokens by increasing
+%     $|{-\log p_t}-H(p)|$ and retain the shortest prefix whose cumulative
+%     probability is at least the typical-$p$ threshold
+%     \citep{meister2023typical}.
+%
+%     \item \textbf{Mirostat.} Maintain a feedback state targeting a specified
+%     mean surprise and use it to adapt the top-$k$ cutoff
+%     \citep{basu2021mirostat}.
+%
+%     \item \textbf{Mirostat 2.} Maintain an adaptive threshold $\mu$ targeting
+%     mean surprise $\tau$. Exclude tokens with $-\log p_t>\mu$, sample from the
+%     remaining tokens, and update $\mu$ using the difference between the sampled
+%     token's surprise and $\tau$ \citep{basu2021mirostat}.
+%
+%     \item \textbf{$\eta$-sampling.} For hyperparameter $\epsilon$, let
+%     $\eta=\min\{\epsilon,\sqrt{\epsilon}\exp(-H(p))\}$ and retain tokens with
+%     $p_t>\eta$ \citep{hewitt2022eta}.
+%
+%     \item \textbf{Tail-free sampling.} Sort tokens by decreasing probability
+%     and compute the normalized magnitudes of the second finite differences of
+%     those probabilities. Retain tokens until their cumulative value reaches the
+%     threshold $z$, and exclude all remaining tokens
+%     \citep{bricken_tailfree,koboldcpp_samplers}.
+%
+%     \item \textbf{Top-$a$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
+%     $p_t\geq a p_{\max}^2$ \citep{koboldcpp_samplers}.
+%
+%     \item \textbf{Stop strings.} Stop generation when a specified string is
+%     produced; the matched string may be returned or omitted depending on the
+%     implementation \citep{openai_chat_sampling,vllm_sampling_params}.
+% \end{enumerate}
+\noindent \textbf{(1)} \textbf{Temperature.} For $T>0$, replace $z_t$ by $z_t/T$. \textbf{(2)}
+\textbf{Logit bias or token bias.} For a fixed per-token bias $b_t$, replace
+$z_t$ by $z_t+b_t$ \citep{openai_chat_sampling}. \textbf{(3)} \textbf{Top-$p$ (nucleus
+sampling).} Sort tokens by decreasing probability and retain the shortest
+prefix whose cumulative mass is at least $p$ \citep{holtzman2020nucleus}. \textbf{(4)}
+\textbf{Top-$k$.} Retain the $k$ tokens with greatest probability
+\citep{huggingface_generation}. \textbf{(5)} \textbf{Frequency penalty.} If $c_t$ is the
+number of occurrences of $t$ in the history consulted by the decoder, replace
+$z_t$ by $z_t-\lambda_f c_t$. \textbf{(6)} \textbf{Presence penalty.} Replace $z_t$ by
+$z_t-\lambda_p\mathbf{1}\{c_t>0\}$. \textbf{(7)} \textbf{Repetition penalty.} For a
+penalty $r>0$, rescale logits of tokens found in the consulted history using the
+implementation's fixed sign-aware rule; the standard Transformers rule divides
+a positive logit by $r$ and multiplies a negative logit by $r$
+\citep{huggingface_repetition_penalty}. \textbf{(8)} \textbf{Structured-output
+enforcement.} Given a grammar or schema, retain exactly the tokens that can
+validly extend it from the current prefix
+\citep{llamacpp_grammar_filter,llamacpp_server}. \textbf{(9)}
+\textbf{No-repeat-$n$-gram.} Exclude every token that would complete an $n$-gram
+already present in the generated history \citep{huggingface_generation}. \textbf{(10)}
+\textbf{Min-$p$.} With $p_{\max}=\max_t p_t$, retain tokens satisfying
+$p_t\geq \alpha p_{\max}$ \citep{nguyen2025minp}. \textbf{(11)} \textbf{Typical-$p$.}
+Sort tokens by increasing $|{-\log p_t}-H(p)|$ and retain the shortest prefix
+whose cumulative probability is at least the typical-$p$ threshold
+\citep{meister2023typical}. \textbf{(12)} \textbf{Mirostat.} Maintain a feedback state
+targeting a specified mean surprise and use it to adapt the top-$k$ cutoff
+\citep{basu2021mirostat}. \textbf{(13)} \textbf{Mirostat 2.} Maintain an adaptive
+threshold $\mu$ targeting mean surprise $\tau$. Exclude tokens with $-\log
+p_t>\mu$, sample from the remaining tokens, and update $\mu$ using the
+difference between the sampled token's surprise and $\tau$
+\citep{basu2021mirostat}. \textbf{(14)} \textbf{$\eta$-sampling.} For hyperparameter
+$\epsilon$, let $\eta=\min\{\epsilon,\sqrt{\epsilon}\exp(-H(p))\}$ and retain
+tokens with $p_t>\eta$ \citep{hewitt2022eta}. \textbf{(15)} \textbf{Tail-free sampling.}
+Sort tokens by decreasing probability and compute the normalized magnitudes of
+the second finite differences of those probabilities. Retain tokens until their
+cumulative value reaches the threshold $z$, and exclude all remaining tokens
+\citep{bricken_tailfree,koboldcpp_samplers}. \textbf{(16)} \textbf{Top-$a$.} With
+$p_{\max}=\max_t p_t$, retain tokens satisfying $p_t\geq a p_{\max}^2$
+\citep{koboldcpp_samplers}. \textbf{(17)} \textbf{Stop strings.} Stop generation when a
+specified string is produced; the matched string may be returned or omitted
+depending on the implementation
+\citep{openai_chat_sampling,vllm_sampling_params}.
 
 \section{Conventions}
 
@@ -203,29 +268,47 @@ knowing its underlying token ID by limiting each response to one generated
 token.
 
 Each multinomial experiment $E_j$ has the following associated quantities:
-\begin{enumerate}
-    \item An expected context $C_j$, chosen by the experimenter,
-    representing the context that the user \emph{believes} the served LLM $\widetilde{M}$ receives
-    immediately before the first token is generated.
-    \item Given any token $t$, $z_j(t)$, the raw logit assigned to $t$
-    by the expected model $M$ on context $C_j$, and $\widetilde{z}_j(t)$, the corresponding raw logit assigned by the served model
-    $\widetilde{M}$ on the context actually used by the provider. The
-    quantity $z_j(t)$ is computable by the user, whereas $\widetilde{z}_j(t)$
-    is unobserved.
-    \item A number of queries $N_j$, chosen by the experimenter.
-    \item Two token lists
-    $A_j=(a_{1,j},\ldots,a_{k_j,j})$ and
-    $B_j=(b_{1,j},\ldots,b_{k_j,j})$, where both $k_j$ and the tokens in
-    each list are chosen by the experimenter.
-    \item For each $i=1,\ldots,k_j$, the observed counts
-    $n_j(a_{i,j})$ and $n_j(b_{i,j})$, giving the number of queries whose first
-    generated token returned was $a_{i,j}$ or $b_{i,j}$, respectively.
-    \item For each $i=1,\ldots,k_j$, the unobserved theoretical quantities
-    $p_j(a_{i,j})$ and $p_j(b_{i,j})$, giving the true probabilities that the first
-    generated token returned by a query is $a_{i,j}$ or $b_{i,j}$,
-    respectively. ($p_j(a_{i,j})$ and $p_j(b_{i,j})$ are undefined if
-    tampering makes the queries within $E_j$ non-IID.)
-\end{enumerate}
+% \begin{enumerate}
+%     \item An expected context $C_j$, chosen by the experimenter,
+%     representing the context that the user \emph{believes} the served LLM $\widetilde{M}$ receives
+%     immediately before the first token is generated.
+%     \item Given any token $t$, $z_j(t)$, the raw logit assigned to $t$
+%     by the expected model $M$ on context $C_j$, and $\widetilde{z}_j(t)$, the corresponding raw logit assigned by the served model
+%     $\widetilde{M}$ on the context actually used by the provider. The
+%     quantity $z_j(t)$ is computable by the user, whereas $\widetilde{z}_j(t)$
+%     is unobserved.
+%     \item A number of queries $N_j$, chosen by the experimenter.
+%     \item Two token lists
+%     $A_j=(a_{1,j},\ldots,a_{k_j,j})$ and
+%     $B_j=(b_{1,j},\ldots,b_{k_j,j})$, where both $k_j$ and the tokens in
+%     each list are chosen by the experimenter.
+%     \item For each $i=1,\ldots,k_j$, the observed counts
+%     $n_j(a_{i,j})$ and $n_j(b_{i,j})$, giving the number of queries whose first
+%     generated token returned was $a_{i,j}$ or $b_{i,j}$, respectively.
+%     \item For each $i=1,\ldots,k_j$, the unobserved theoretical quantities
+%     $p_j(a_{i,j})$ and $p_j(b_{i,j})$, giving the true probabilities that the first
+%     generated token returned by a query is $a_{i,j}$ or $b_{i,j}$,
+%     respectively. ($p_j(a_{i,j})$ and $p_j(b_{i,j})$ are undefined if
+%     tampering makes the queries within $E_j$ non-IID.)
+% \end{enumerate}
+\noindent \textbf{(1)} An expected context $C_j$, chosen by the experimenter,
+representing the context that the user \emph{believes} the served LLM
+$\widetilde{M}$ receives immediately before the first token is generated. \textbf{(2)}
+Given any token $t$, $z_j(t)$, the raw logit assigned to $t$ by the expected
+model $M$ on context $C_j$, and $\widetilde{z}_j(t)$, the corresponding raw
+logit assigned by the served model $\widetilde{M}$ on the context actually used
+by the provider. The quantity $z_j(t)$ is computable by the user, whereas
+$\widetilde{z}_j(t)$ is unobserved. \textbf{(3)} A number of queries $N_j$, chosen by the
+experimenter. \textbf{(4)} Two token lists $A_j=(a_{1,j},\ldots,a_{k_j,j})$ and
+$B_j=(b_{1,j},\ldots,b_{k_j,j})$, where both $k_j$ and the tokens in each list
+are chosen by the experimenter. \textbf{(5)} For each $i=1,\ldots,k_j$, the observed
+counts $n_j(a_{i,j})$ and $n_j(b_{i,j})$, giving the number of queries whose
+first generated token returned was $a_{i,j}$ or $b_{i,j}$, respectively. \textbf{(6)}
+For each $i=1,\ldots,k_j$, the unobserved theoretical quantities
+$p_j(a_{i,j})$ and $p_j(b_{i,j})$, giving the true probabilities that the first
+generated token returned by a query is $a_{i,j}$ or $b_{i,j}$, respectively.
+($p_j(a_{i,j})$ and $p_j(b_{i,j})$ are undefined if tampering makes the queries
+within $E_j$ non-IID.)
 \emph{Remark.} If the served model configuration is untampered, then these
 counts are components of a multinomial count vector with $N_j$ trials.
 
@@ -389,17 +472,18 @@ except temperature $T$ and the token biases $b(a_i)$ and $b(b_i)$.
 Fix $j\in\{1,2\}$ and $i\in\{1,\ldots,k\}$. First consider top-$p$,
 top-$k$, structured-output enforcement, no-repeat-$n$-gram, min-$p$,
 typical-$p$, Mirostat, Mirostat~2, $\eta$-sampling, tail-free sampling, and
-top-$a$. Each of these parameters retains a subset $S$ of tokens and
-renormalizes their probabilities without changing the relative probabilities
-of the retained tokens. Because $E_j$ is $\rho$-regular, both $a_i$ and $b_i$
-survive every such restriction, and the common renormalization cancels from
-their probability ratio. Thus, these eleven parameters do not affect it.
-
+top-$a$. Each retains a subset $S$ of tokens and renormalizes their
+probabilities. Because $E_j$ is $\rho$-regular, both $a_i$ and $b_i$ survive,
+and $\frac{p_j(a_i)/\sum_{t\in S}p_j(t)}
+{p_j(b_i)/\sum_{t\in S}p_j(t)}=\frac{p_j(a_i)}{p_j(b_i)}$. Thus, these eleven
+parameters do not affect the ratio.
 It remains to consider frequency penalty, presence penalty, and repetition
 penalty. By $\rho$-regularity, neither $a_i$ nor $b_i$ occurs in the context,
 so these parameters leave both logits unchanged. Since these logits are used in
 the calculation of the token probabilities, $p_j(a_i)/p_j(b_i)$ is also unchanged.
-
+Finally, stop strings are either irrelevant to the distribution of the first
+generated token returned or act as a masking rule, in which case the preceding
+reasoning applies.
 The only remaining standard decoding parameters are temperature and token bias,
 which proves the claim.
 \end{proof}
@@ -733,7 +817,7 @@ The two tampered configurations were
   created by Alibaba Cloud. You are a helpful assistant.}
 \end{enumerate}
 
-\subsection{Empirical Testing Methodology}
+\subsection{Expanded Empirical Testing Methodology}
 \label{app:proof-of-concept-methodology}
 
 \subsubsection{Tamper-Detection Test Construction}
