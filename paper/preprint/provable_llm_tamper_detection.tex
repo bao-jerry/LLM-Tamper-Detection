@@ -340,9 +340,9 @@ and $\Delta z_j=z_{a,j}-z_{b,j}$; the bias aggregates
 
 \paragraph{$\rho$-regularity.}
 An experiment $E_j$ is \emph{$\rho$-regular} if the tokens in $A_j$ and $B_j$
-are distinct and, for every $t\in A_j\cup B_j$: (1) $t$ belongs to $M$'s
-vocabulary; (2) $t$ does not occur in $C_j$ under $M$'s tokenizer; and
-(3) $p_j(t)>0$, meaning that $t$ is able to be returned by the provider's LLM
+are distinct and, for every $t\in A_j\cup B_j$: \textbf{(1)} $t$ belongs to $M$'s
+vocabulary; \textbf{(2)} $t$ does not occur in $C_j$ under $M$'s tokenizer; and
+\textbf{(3)} $p_j(t)>0$, meaning that $t$ is able to be returned by the provider's LLM
 API during experiment $E_j$.
 
 \emph{Remark.} In practice, fulfilling condition~2 only requires the experimenter to choose
@@ -643,9 +643,9 @@ adversarial spoofing, although we do not make claims about its universality.
 We experimentally test our detection method by fixing the expected untampered
 model configuration to be Qwen2.5-14B-Instruct~\citep{qwen25_14b_instruct_hf}
 at 8-bit quantization with the default Qwen2.5-14B-Instruct system prompt. We then select
-24 tampered versions of this configuration across 4 tampering regimes: 1)
-backend model re-routing, 2) secret fine-tuning, 3) hidden system prompt
-injection, and 4) secret quantization. Within each experiment, every model
+24 tampered versions of this configuration across 4 tampering regimes: \textbf{(1)}
+backend model re-routing, \textbf{(2)} secret fine-tuning, \textbf{(3)} hidden system prompt
+injection, and \textbf{(4)} secret quantization. Within each experiment, every model
 configuration is given the same hidden, randomized selection of temperature,
 logit-bias, and top-p decoding parameters. The tampered configurations were
 derived from the same model family as Qwen2.5-14B-Instruct in order to make
